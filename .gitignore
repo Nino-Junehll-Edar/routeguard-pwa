@@ -1,0 +1,9 @@
+# .gitignore for RouteGuard Svelte PWA
+.node_modules/
+.claude/
+.worktrees/
+# Logs
+*.log
+# OS-generated files
+.DS_Store
+Thumbs.db
