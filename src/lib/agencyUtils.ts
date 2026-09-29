@@ -79,42 +79,12 @@ export async function loadAgencyRequests(filters: { status?: string } = {}): Pro
 /**
  * Approve an agency request
  */
-export async function approveAgencyRequest(requestId: string, adminUserId: string): Promise<{ success: boolean; error?: string }> {
+export async function approveAgencyRequest(requestId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    // Start transaction-like behavior
-    const { error: requestError } = await supabase
-      .from('agency_requests')
-      .update({
-        status: 'approved',
-        reviewed_by: adminUserId,
-        reviewed_at: new Date().toISOString()
-      })
-      .eq('id', requestId);
-
-    if (requestError) {
-      return { success: false, error: requestError.message };
-    }
-
-    // Get the request to update user profile
-    const { data: requestData, error: fetchError } = await supabase
-      .from('agency_requests')
-      .select('user_id, role')
-      .eq('id', requestId)
-      .single();
-
-    if (fetchError) {
-      return { success: false, error: fetchError.message };
-    }
-
-    // Update user's role to agency_personnel
-    const { error: updateError } = await supabase
-      .from('user_profiles')
-      .update({ role: requestData.role })
-      .eq('id', requestData.user_id);
-
-    if (updateError) {
-      return { success: false, error: updateError.message };
-    }
+    const { error } = await supabase.rpc('approve_agency_request', {
+      p_request_id: requestId
+    });
+    if (error) return { success: false, error: error.message };
 
     return { success: true };
   } catch (error) {
@@ -125,16 +95,11 @@ export async function approveAgencyRequest(requestId: string, adminUserId: strin
 /**
  * Reject an agency request
  */
-export async function rejectAgencyRequest(requestId: string, adminUserId: string): Promise<{ success: boolean; error?: string }> {
+export async function rejectAgencyRequest(requestId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const { error } = await supabase
-      .from('agency_requests')
-      .update({
-        status: 'rejected',
-        reviewed_by: adminUserId,
-        reviewed_at: new Date().toISOString()
-      })
-      .eq('id', requestId);
+    const { error } = await supabase.rpc('reject_agency_request', {
+      p_request_id: requestId
+    });
 
     if (error) {
       return { success: false, error: error.message };

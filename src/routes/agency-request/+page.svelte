@@ -2,6 +2,10 @@
   import { onMount } from 'svelte';
   import { submitAgencyRequest } from '$lib/agencyUtils';
   import { user } from '$lib/authStore';
+  import { profile } from '$lib/stores/profile';
+  import { get } from 'svelte/store';
+  import { goto } from '$app/navigation';
+  import { supabase } from '$lib/supabaseClient';
 
   let formData = {
     full_name: '',
@@ -14,20 +18,82 @@
   let isSubmitting = false;
   let errorMessage: string | null = null;
   let successMessage: string | null = null;
+  let isLoading = true;
+  let authRedirect = '';
 
-  // Pre-fill with user data if available
-  onMount(() => {
+  // Check authentication and redirect if needed
+  async function checkAuth() {
     const currentUser = user.get();
-    if (currentUser) {
-      // In a real app, you might fetch profile data to pre-fill
-      formData.full_name = currentUser.user_metadata?.full_name || '';
+    const profileData = profile.get();
+
+    if (!currentUser) {
+      // Not signed in, redirect to login
+      authRedirect = '/agency-request';
+      goto('/login');
+      return;
     }
+
+    // Load profile if not already loaded
+    if (!profileData) {
+      // Profile will be loaded via authStore listener
+    }
+
+    // Check if user is already agency personnel or admin
+    if (profileData && (profileData.role === 'agency_personnel' || profileData.role === 'admin')) {
+      // Already has agency access, redirect appropriately
+      goto(profileData.role === 'admin' ? '/admin/agency-requests' : '/agency');
+      return;
+    }
+
+    // Prefill form with profile data
+    if (profileData) {
+      formData.full_name = profileData.full_name || '';
+      // Email is not in the form, but we could add it if needed
+    }
+
+    isLoading = false;
+  }
+
+  onMount(() => {
+    checkAuth();
   });
+
+  // Function to check if user already has a pending request
+  async function hasPendingRequest(): Promise<boolean> {
+    const currentUser = user.get();
+    if (!currentUser) return false;
+
+    try {
+      const { data, error } = await supabase
+        .from('agency_requests')
+        .select('id')
+        .eq('user_id', currentUser.id)
+        .eq('status', 'pending')
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 means no rows returned
+        console.error('Error checking for pending request:', error);
+        return false; // Assume no pending request on error to allow submission
+      }
+
+      return !!data; // true if a pending request exists
+    } catch (error) {
+      console.error('Error checking for pending request:', error);
+      return false;
+    }
+  }
 
   async function handleSubmit() {
     // Basic validation
     if (!formData.full_name || !formData.agency || !formData.role || !formData.purpose) {
       errorMessage = 'Please fill in all required fields';
+      return;
+    }
+
+    // Check for existing pending request
+    const hasPending = await hasPendingRequest();
+    if (hasPending) {
+      errorMessage = 'You already have a pending agency request. Please wait for it to be reviewed.';
       return;
     }
 
@@ -78,30 +144,30 @@
   <form on:submit|preventDefault={handleSubmit}>
     <div class="form-group">
       <label for="full_name">Full Name:</label>
-      <input type="text" id="full_name" bind:value={formData.full_name} required />
+      <input type="text" id="full_name" bind:value={formData.full_name} required class="input" />
     </div>
 
     <div class="form-group">
       <label for="agency">Agency/Organization:</label>
-      <input type="text" id="agency" bind:value={formData.agency} required />
+      <input type="text" id="agency" bind:value={formData.agency} required class="input" />
     </div>
 
     <div class="form-group">
       <label for="role">Role/Position:</label>
-      <input type="text" id="role" bind:value={formData.role} required />
+      <input type="text" id="role" bind:value={formData.role} required class="input" />
     </div>
 
     <div class="form-group">
       <label for="id_number">ID Number (optional):</label>
-      <input type="text" id="id_number" bind:value={formData.id_number} />
+      <input type="text" id="id_number" bind:value={formData.id_number} class="input" />
     </div>
 
     <div class="form-group">
       <label for="purpose">Purpose/Reason for Request:</label>
-      <textarea id="purpose" bind:value={formData.purpose} rows="4" required></textarea>
+      <textarea id="purpose" bind:value={formData.purpose} rows="4" required class="input"></textarea>
     </div>
 
-    <button type="submit" disabled={isSubmitting}>
+    <button type="submit" disabled={isSubmitting} class="btn-primary">
       {#if isSubmitting}
         Submitting...
       {:else}
@@ -110,78 +176,3 @@
     </button>
   </form>
 </div>
-
-<style>
-  .agency-request-container {
-    max-width: 600px;
-    margin: 2rem auto;
-    padding: 1.5rem;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  }
-
-  .form-group {
-    margin-bottom: 1.5rem;
-  }
-
-  .form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: bold;
-  }
-
-  .form-group input,
-  .form-group textarea {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 1rem;
-  }
-
-  .form-group textarea {
-    resize: vertical;
-  }
-
-  .error-message {
-    background-color: #ffe6e6;
-    color: #d33;
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1.5rem;
-  }
-
-  .success-message {
-    background-color: #e6ffe6;
-    color: #2d5a2d;
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1.5rem;
-  }
-
-  button {
-    background-color: #28a745;
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 4px;
-    font-size: 1rem;
-    cursor: pointer;
-  }
-
-  button:disabled {
-    background-color: #cccccc;
-    cursor: not-allowed;
-  }
-
-  button:hover:not(:disabled) {
-    background-color: #218838;
-  }
-
-  .description {
-    color: #666;
-    margin-bottom: 1.5rem;
-    line-height: 1.5;
-  }
-</style>
