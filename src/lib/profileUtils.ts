@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { user } from './authStore';
+import { profile } from '$lib/stores/profile';
 import type { UserProfile } from '$lib/types/profile';
 
 /**
@@ -7,7 +8,10 @@ import type { UserProfile } from '$lib/types/profile';
  */
 export async function loadUserProfile(): Promise<UserProfile | null> {
   const currentUser = user.get();
-  if (!currentUser) return null;
+  if (!currentUser) {
+    profile.set(null);
+    return null;
+  }
 
   const { data, error } = await supabase
     .from('user_profiles')
@@ -17,9 +21,11 @@ export async function loadUserProfile(): Promise<UserProfile | null> {
 
   if (error) {
     console.error('Error loading user profile:', error);
+    profile.set(null);
     return null;
   }
 
+  profile.set(data);
   return data;
 }
 
@@ -40,8 +46,8 @@ export async function updateUserProfile(updates: Partial<UserProfile>): Promise<
     return false;
   }
 
-  // Update the auth store
-  user.set({ ...currentUser, ...updates } as any);
+  // Update the profile store
+  profile.update(p => p ? { ...p, ...updates } : null);
   return true;
 }
 
@@ -49,10 +55,20 @@ export async function updateUserProfile(updates: Partial<UserProfile>): Promise<
  * Add reputation points to a user
  */
 export async function addReputationPoints(userId: string, points: number): Promise<boolean> {
-  // We'll use a simple update for now. In a more complex system, we might use a database function.
+  const { data: profile, error: fetchError } = await supabase
+    .from('user_profiles')
+    .select('reputation_points')
+    .eq('id', userId)
+    .single();
+
+  if (fetchError || !profile) {
+    console.error('Error loading reputation points:', fetchError);
+    return false;
+  }
+
   const { error } = await supabase
     .from('user_profiles')
-    .update({ reputation_points: supabase.sql(`reputation_points + ${points}`) })
+    .update({ reputation_points: profile.reputation_points + points })
     .eq('id', userId);
 
   if (error) {
