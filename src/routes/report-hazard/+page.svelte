@@ -2,23 +2,43 @@
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabaseClient';
   import { user } from '$lib/authStore';
-  import { uploadHazardPhoto } from '$lib/storageUtils';
+  import { uploadHazardPhoto, deleteHazardPhoto } from '$lib/storageUtils';
   import type { HazardReportForm } from '$lib/types/hazardReport';
+  import { writable } from 'svelte/store';
+
+  // Geolocation state machine
+  const GEOLOCATION_STATUS = {
+    REQUESTING: 'requesting',
+    LOCATED: 'located',
+    DENIED: 'denied',
+    UNAVAILABLE: 'unavailable',
+    ERROR: 'error'
+  } as const;
+
+  let geoStatus = writable<keyof typeof GEOLOCATION_STATUS>(GEOLOCATION_STATUS.REQUESTING);
+  let latitude: number | null = null;
+  let longitude: number | null = null;
+  let geoError: string | null = null;
+  let manualLocationEnabled = false;
+  let manualLat = '';
+  let manualLng = '';
+  let manualLatError: string | null = null;
+  let manualLngError: string | null = null;
 
   let hazardType = '';
   let description = '';
   let photoFile: File | null = null;
   let photoPreview: string | null = null;
   let isSubmitting = false;
-  let latitude: number | null = null;
-  let longitude: number | null = null;
   let errorMessage: string | null = null;
   let successMessage: string | null = null;
 
-  // Get user location on mount
+  // Initialize geolocation on mount
   onMount(() => {
+    updateGeolocationStatus(GEOLOCATION_STATUS.REQUESTING);
     if (!navigator.geolocation) {
-      errorMessage = 'Geolocation is not supported by your browser';
+      updateGeolocationStatus(GEOLOCATION_STATUS.UNAVAILABLE);
+      geoError = 'Geolocation is not supported by your browser';
       return;
     }
 
@@ -26,12 +46,74 @@
       (position) => {
         latitude = position.coords.latitude;
         longitude = position.coords.longitude;
+        updateGeolocationStatus(GEOLOCATION_STATUS.LOCATED);
       },
       (error) => {
-        errorMessage = `Unable to get location: ${error.message}`;
+        // Handle different error types
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            updateGeolocationStatus(GEOLOCATION_STATUS.DENIED);
+            geoError = 'Location permission denied. Please enable location services to report hazards.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            updateGeolocationStatus(GEOLOCATION_STATUS.UNAVAILABLE);
+            geoError = 'Location information is unavailable.';
+            break;
+          case error.TIMEOUT:
+            updateGeolocationStatus(GEOLOCATION_STATUS.ERROR);
+            geoError = 'Location request timed out.';
+            break;
+          default:
+            updateGeolocationStatus(GEOLOCATION_STATUS.ERROR);
+            geoError = `Unknown error: ${error.message}`;
+            break;
+        }
       }
     );
   });
+
+  function updateGeolocationStatus(status: keyof typeof GEOLOCATION_STATUS) {
+    geoStatus.set(status);
+  }
+
+  // Retry geolocation request
+  function retryGeolocation() {
+    updateGeolocationStatus(GEOLOCATION_STATUS.REQUESTING);
+    geoError = null;
+    if (!navigator.geolocation) {
+      updateGeolocationStatus(GEOLOCATION_STATUS.UNAVAILABLE);
+      geoError = 'Geolocation is not supported by your browser';
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        latitude = position.coords.latitude;
+        longitude = position.coords.longitude;
+        updateGeolocationStatus(GEOLOCATION_STATUS.LOCATED);
+      },
+      (error) => {
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            updateGeolocationStatus(GEOLOCATION_STATUS.DENIED);
+            geoError = 'Location permission denied. Please enable location services to report hazards.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            updateGeolocationStatus(GEOLOCATION_STATUS.UNAVAILABLE);
+            geoError = 'Location information is unavailable.';
+            break;
+          case error.TIMEOUT:
+            updateGeolocationStatus(GEOLOCATION_STATUS.ERROR);
+            geoError = 'Location request timed out.';
+            break;
+          default:
+            updateGeolocationStatus(GEOLOCATION_STATUS.ERROR);
+            geoError = `Unknown error: ${error.message}`;
+            break;
+        }
+      }
+    );
+  }
 
   async function handlePhotoChange(event: Event) {
     const input = event.target as HTMLInputElement;
@@ -48,9 +130,30 @@
   }
 
   async function handleSubmit() {
-    if (!latitude || !longitude) {
-      errorMessage = 'Unable to get your location. Please try again.';
-      return;
+    // Determine which coordinates to use
+    let useLatitude: number | null = latitude;
+    let useLongitude: number | null = longitude;
+
+    // If manual location is enabled, use manual coordinates
+    if (manualLocationEnabled) {
+      useLatitude = parseFloat(manualLat);
+      useLongitude = parseFloat(manualLng);
+
+      // Validate manual coordinates
+      if (isNaN(useLatitude) || useLatitude < -90 || useLatitude > 90) {
+        errorMessage = 'Please enter a valid latitude between -90 and 90';
+        return;
+      }
+      if (isNaN(useLongitude) || useLongitude < -180 || useLongitude > 180) {
+        errorMessage = 'Please enter a valid longitude between -180 and 180';
+        return;
+      }
+    } else {
+      // Validate that we have a location from geolocation (check for null, not falsy, to allow 0,0)
+      if (useLatitude === null || useLongitude === null) {
+        errorMessage = 'Unable to get your location. Please try again.';
+        return;
+      }
     }
 
     if (!hazardType) {
@@ -62,22 +165,32 @@
     errorMessage = null;
     successMessage = null;
 
+    // Track uploaded photo URL for cleanup on failure
+    let photoUrl: string | null = null;
+    let photoUploaded = false;
+
     try {
+      // Get current user
+      const currentUser = user.get();
+      if (!currentUser) {
+        throw new Error('User not authenticated');
+      }
+
       // Upload photo if provided
-      let photoUrl: string | null = null;
       if (photoFile) {
-        photoUrl = await uploadHazardPhoto(photoFile);
+        photoUrl = await uploadHazardPhoto(photoFile, currentUser.id);
         if (!photoUrl) {
           throw new Error('Failed to upload photo');
         }
+        photoUploaded = true;
       }
 
       // Insert hazard report into database
       const { data, error } = await supabase
         .from('hazards')
         .insert({
-          reporter_id: user.get()?.id ?? null,
-          location: `POINT(${longitude} ${latitude})`,
+          reporter_id: currentUser.id,
+          location: `POINT(${useLongitude} ${useLatitude})`,
           hazard_type: hazardType,
           description: description || null,
           photo_url: photoUrl,
@@ -96,10 +209,23 @@
       description = '';
       photoFile = null;
       photoPreview = null;
+      manualLat = '';
+      manualLng = '';
+      manualLocationEnabled = false;
 
     } catch (error) {
       console.error('Error reporting hazard:', error);
       errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+
+      // Clean up uploaded photo if hazard insert failed
+      if (photoUploaded && photoUrl) {
+        try {
+          await deleteHazardPhoto(photoUrl);
+        } catch (cleanupError) {
+          console.error('Error cleaning up uploaded photo:', cleanupError);
+          // We don't want to overwrite the original error with cleanup error
+        }
+      }
     } finally {
       isSubmitting = false;
     }
@@ -147,13 +273,68 @@
     </div>
 
     <div class="form-group">
-      <p>Your location will be automatically included with this report.</p>
-      {#if latitude && longitude}
-        <p class="location-info">Lat: {latitude.toFixed(6)}, Lng: {longitude.toFixed(6)}</p>
-      {/if}
+      <p>{#if $geoStatus === 'requesting'}
+        Getting your location...
+      {:else if $geoStatus === 'located'}
+        Your location: Lat: {$latitude?.toFixed(6) || '0.000000'}, Lng: {$longitude?.toFixed(6) || '0.000000'}
+      {:else if $geoStatus === 'denied'}
+        Location permission denied.
+        <button on:click={retryGeolocation} class="btn-link">Try again</button> or
+        <button on:click={() => manualLocationEnabled = true} class="btn-link">Enter manually</button>
+      {:else if $geoStatus === 'unavailable'}
+        Geolocation is not supported by your browser.
+        <button on:click={() => manualLocationEnabled = true} class="btn-link">Enter location manually</button>
+      {:else if $geoStatus === 'error'}
+        {$geoError}
+        <button on:click={retryGeolocation} class="btn-link">Try again</button>
+      {/if}</p>
     </div>
 
-    <button type="submit" disabled={isSubmitting}>
+    {#if manualLocationEnabled}
+    <div class="form-group">
+      <h3>Enter Location Manually</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="manual-lat">Latitude:</label>
+          <input type="number" id="manual-lat" bind:value={manualLat} step="any" />
+          {#if manualLatError}
+            <p class="error">{manualLatError}</p>
+          {/if}
+        </div>
+        <div class="form-group">
+          <label for="manual-lng">Longitude:</label>
+          <input type="number" id="manual-lng" bind:value={manualLng} step="any" />
+          {#if manualLngError}
+            <p class="error">{manualLngError}</p>
+          {/if}
+        </div>
+      </div>
+      <button on:click={() => {
+        manualLatError = null;
+        manualLngError = null;
+        const lat = parseFloat(manualLat);
+        const lng = parseFloat(manualLng);
+        if (isNaN(lat) || lat < -90 || lat > 90) {
+          manualLatError = 'Please enter a valid latitude between -90 and 90';
+          return;
+        }
+        if (isNaN(lng) || lng < -180 || lng > 180) {
+          manualLngError = 'Please enter a valid longitude between -180 and 180';
+          return;
+        }
+        latitude = lat;
+        longitude = lng;
+        manualLocationEnabled = false;
+      }} class="btn-primary">
+        Use Manual Location
+      </button>
+      <button on:click={() => manualLocationEnabled = false} class="btn-link">
+        Cancel
+      </button>
+    </div>
+    {/if}
+
+    <button type="submit" disabled={isSubmitting} class="btn-primary">
       {#if isSubmitting}
         Reporting...
       {:else}
@@ -162,85 +343,3 @@
     </button>
   </form>
 </div>
-
-<style>
-  .report-container {
-    max-width: 500px;
-    margin: 2rem auto;
-    padding: 1.5rem;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-  }
-
-  .form-group {
-    margin-bottom: 1.5rem;
-  }
-
-  .form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    font-weight: bold;
-  }
-
-  .form-group input,
-  .form-group select,
-  .form-group textarea {
-    width: 100%;
-    padding: 0.75rem;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 1rem;
-  }
-
-  .form-group textarea {
-    resize: vertical;
-  }
-
-  .photo-preview {
-    margin-top: 1rem;
-    text-align: center;
-  }
-
-  .photo-preview img {
-    max-width: 100%;
-    height: auto;
-    border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  }
-
-  .error-message {
-    background-color: #ffe6e6;
-    color: #d33;
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1.5rem;
-  }
-
-  .success-message {
-    background-color: #e6ffe6;
-    color: #2d5a2d;
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1.5rem;
-  }
-
-  button {
-    background-color: #007bff;
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 4px;
-    font-size: 1rem;
-    cursor: pointer;
-  }
-
-  button:disabled {
-    background-color: #cccccc;
-    cursor: not-allowed;
-  }
-
-  button:hover:not(:disabled) {
-    background-color: #0056b3;
-  }
-</style>
