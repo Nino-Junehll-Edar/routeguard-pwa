@@ -10,7 +10,7 @@ import { user } from './authStore';
 export async function uploadHazardPhoto(file: File, userId: string): Promise<string | null> {
   try {
     // Extract and sanitize file extension - only allow alphanumeric characters
-    const fileExt = file.name.split('.').pop().replace(/[^a-z0-9]/gi, '').toLowerCase();
+        const fileExt = (file.name.split('.').pop() || '').replace(/[^a-z0-9]/gi, '').toLowerCase();
     // Default to 'jpg' for safety if extension is invalid or empty
     const safeExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
     const ext = safeExtensions.includes(fileExt) ? fileExt : 'jpg';

@@ -1,0 +1,1243 @@
+<!doctype html><html lang="en" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RouteGuard — UI Prototype v0.1.1</title>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F7F8FA;--surface:#FFFFFF;--raised:#FFFFFF;--border:#DDE3EA;--ink:#12161A;--ink2:#4A545E;
+--primary:#1B5CA8;--brand-ink:#0F3460;--brand-surface:#E7F0FA;--danger:#C4271E;--danger-sf:#FBE9E7;
+--warning:#B45309;--warning-sf:#FCF0DD;--caution:#F0A400;--neutral:#64748B;--neutral-sf:#EEF1F5;
+--success:#2E8555;--success-sf:#E4F3EB;--advisory:#6D28D9;--advisory-sf:#F1EAFB;--route:#1D66C9;--gold:#B7791F;
+--map-land:#EDF1F6;--map-water:#C9E0F4;--map-road:#FFFFFF;--map-minor:#F2F5F9;--map-pk:#DDEAD9;--map-lbl:#5B6B7B;
+--r-s:8px;--r-m:12px;--r-l:16px;--e1:0 1px 2px rgba(10,20,30,.12);--e2:0 4px 14px rgba(10,20,30,.16);--e3:0 12px 32px rgba(10,20,30,.22);
+--ease:cubic-bezier(.32,.72,.24,1);--f:'Public Sans',system-ui,-apple-system,sans-serif}
+[data-theme=dark]{--bg:#0E1116;--surface:#161B22;--raised:#1C2430;--border:#2A3340;--ink:#E6EAF0;--ink2:#9AA7B4;
+--primary:#5E93D6;--brand-ink:#C5D9F2;--brand-surface:#12283F;--danger:#FF6B4A;--danger-sf:#2E1512;
+--warning:#FFC24B;--warning-sf:#2A1F0E;--caution:#E0B341;--neutral:#94A3B8;--neutral-sf:#1D242E;
+--success:#4AC97E;--success-sf:#12271B;--advisory:#A78BFA;--advisory-sf:#1D1533;--route:#6EA8FF;--gold:#E9B44C;
+--map-land:#12171E;--map-water:#0E2438;--map-road:#39434F;--map-minor:#1D242E;--map-pk:#17251B;--map-lbl:#7C8A99}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:var(--f);background:#101418;color:var(--ink);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,select,textarea{font:inherit;color:var(--ink)}
+svg.ic{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+/* error banner */
+#errbox{display:none;position:fixed;bottom:8px;left:8px;right:8px;z-index:9999;background:#7A2A20;color:#fff;font:12px/1.5 ui-monospace,monospace;padding:10px 12px;border-radius:8px;max-height:40vh;overflow:auto;box-shadow:var(--e3)}
+/* prototype bar */
+#proto{position:sticky;top:0;z-index:1000;display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 16px;background:#101418;color:#E6EAF0;border-bottom:1px solid #232a33;font-size:13px}
+#proto .lg{font-weight:800;display:flex;gap:8px;align-items:center;margin-right:auto}
+#proto .lg svg{width:18px;height:18px;stroke:#5E93D6}
+.tgl{display:flex;border:1px solid #333d49;border-radius:8px;overflow:hidden}
+.tgl button{padding:5px 12px;color:#9AA7B4;font-weight:600;font-size:12.5px}
+.tgl button.on{background:#1E2833;color:#fff}
+#proto select{background:#1A2028;color:#E6EAF0;border:1px solid #333d49;border-radius:8px;padding:5px 8px;font-size:12.5px}
+.pbtn{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid #333d49;border-radius:8px;color:#9AA7B4;font-weight:600;font-size:12.5px}
+.pbtn.on{background:#152a18;border-color:#2E8555;color:#7EE2A8}
+#proto .lblx{color:#6b7684;font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+/* phone */
+#view-phone{display:grid;place-items:start center;padding:28px 16px 60px;min-height:calc(100vh - 53px)}
+.phone{position:relative;width:390px;height:844px;background:var(--bg);border-radius:46px;border:11px solid #171b20;box-shadow:0 30px 80px rgba(0,0,0,.55);overflow:hidden;flex:none}
+@media(max-width:460px){.phone{transform:scale(.86);transform-origin:top center}}
+.pstatus{position:absolute;top:0;left:0;right:0;height:42px;z-index:60;display:flex;justify-content:space-between;align-items:center;padding:0 22px;font-size:13px;font-weight:700;color:var(--ink);pointer-events:none}
+.pstatus .sig{display:flex;gap:5px;align-items:center}
+.pscreens,.pscreens>section{position:absolute;inset:0}
+.scr{display:none;background:var(--bg);overflow-y:auto;overscroll-behavior:contain}
+.scr.on{display:block}
+.scr.ontop{z-index:40}
+.page{padding:54px 20px 110px}
+/* components */
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:48px;padding:0 18px;border-radius:var(--r-m);background:var(--primary);color:#fff;font-weight:700;font-size:15px;transition:transform .12s var(--ease)}
+[data-theme=dark] .btn{color:#0B1420}
+.btn:active{transform:scale(.98)}
+.btn.b2{background:var(--surface);color:var(--primary);border:1.5px solid var(--border)}
+.btn.g{background:transparent;color:var(--ink2);min-height:40px}
+.btn.d{background:var(--danger);color:#fff}[data-theme=dark] .btn.d{color:#2A0D08}
+.btn:disabled{opacity:.5;cursor:default}
+.btn.sm{min-height:36px;padding:0 14px;font-size:13px;width:auto}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11.5px;font-weight:700;background:var(--neutral-sf);color:var(--ink2)}
+.chip.p{background:var(--brand-surface);color:var(--primary)}
+.chip.r{background:var(--danger-sf);color:var(--danger)}.chip.a{background:var(--warning-sf);color:var(--warning)}
+.chip.gn{background:var(--success-sf);color:var(--success)}.chip.v{background:var(--advisory-sf);color:var(--advisory)}
+.chip.gd{background:var(--warning-sf);color:var(--gold)}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12.5px;font-weight:700;color:var(--ink2);margin-bottom:6px}
+.in{width:100%;min-height:48px;padding:0 14px;border:1.5px solid var(--border);border-radius:var(--r-m);background:var(--surface);font-size:15px}
+textarea.in{padding:12px 14px;min-height:76px;resize:vertical}
+.in:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--brand-surface)}
+.hint{font-size:12px;color:var(--ink2)}
+.h1{font-size:24px;font-weight:800;line-height:1.2;letter-spacing:-.3px}
+.h2{font-size:18px;font-weight:800}
+.sub{color:var(--ink2);font-size:13.5px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-l)}
+.meter{height:8px;border-radius:99px;background:var(--neutral-sf);overflow:hidden}
+.meter>i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--warning));transition:width .6s var(--ease)}
+.tnum{font-variant-numeric:tabular-nums}
+.backbar{display:flex;align-items:center;gap:8px;padding:46px 14px 10px}
+.backbar .h2{flex:1;text-align:center;margin-right:44px}
+/* nav */
+#pnav{position:absolute;left:0;right:0;bottom:0;height:76px;z-index:30;display:none;background:var(--surface);border-top:1px solid var(--border);padding:0 8px}
+#pnav.on{display:flex}
+.nv{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding-top:9px;color:var(--ink2);font-size:10.5px;font-weight:600;position:relative}
+.nv svg.ic{width:22px;height:22px}
+.nv.on{color:var(--primary)}
+.nv.on svg{stroke-width:2.6}
+.nv .nd{position:absolute;top:8px;right:calc(50% - 15px);width:8px;height:8px;border-radius:99px;background:var(--danger);border:2px solid var(--surface)}
+#fab{width:58px;height:58px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;margin-top:-26px;box-shadow:var(--e2);border:4px solid var(--surface)}
+#fab svg{width:26px;height:26px;stroke-width:2.5}
+#fabl{position:absolute;bottom:2px;left:0;right:0;text-align:center;font-size:9.5px;font-weight:700;color:var(--primary)}
+#fabwrap{flex:1;display:flex;justify-content:center;position:relative}
+/* map */
+.mapwrap{position:absolute;inset:0;overflow:hidden;background:var(--map-land)}
+.mapwrap>svg.base{position:absolute;inset:0;width:100%;height:100%}
+.ovl{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.l{fill:var(--map-land)}.w{fill:var(--map-water)}.wv{fill:none;stroke:var(--map-water);stroke-width:14;stroke-linecap:round}
+.pk{fill:var(--map-pk)}
+.rd{stroke:var(--map-minor);stroke-width:5;fill:none;stroke-linecap:round}
+.rdm{stroke:var(--map-road);stroke-width:8;fill:none;stroke-linecap:round}
+.lb{fill:var(--map-lbl);font:600 9px var(--f);letter-spacing:.4px}
+.lb.big{font:800 13px var(--f)}
+.lb.wt{fill:#5B84B0;font-style:italic}
+.adv{opacity:var(--adv-o,1)}
+.advL{stroke:var(--advisory);stroke-width:6;stroke-dasharray:11 8;fill:none;stroke-linecap:round}
+.advZ{fill:var(--advisory-sf);stroke:var(--advisory);stroke-width:2}
+.advT{fill:var(--advisory);font:800 10px var(--f)}
+.rt{stroke:var(--route);stroke-width:8;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.rtc{stroke:var(--surface);stroke-width:12;fill:none;stroke-linecap:round;stroke-linejoin:round;opacity:.9}
+.pins{position:absolute;inset:0}
+.pin{position:absolute;transform:translate(-50%,-50%);width:34px;height:34px;z-index:5}
+.pin .dot{position:absolute;inset:2px;border-radius:50%;background:var(--pc,var(--neutral));border:2.5px solid var(--surface);display:grid;place-items:center;box-shadow:var(--e1);transition:transform .15s var(--ease)}
+.pin:active .dot{transform:scale(1.15)}
+.pin .dot svg{width:15px;height:15px;fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.pin.impassable{--pc:var(--danger)}.pin.one_lane{--pc:var(--warning)}.pin.passable{--pc:var(--caution)}
+.pin.single .dot{border-style:dashed}
+.pin .bdg{position:absolute;right:-2px;bottom:-2px;width:16px;height:16px;border-radius:50%;background:var(--brand-ink);border:2px solid var(--surface);display:grid;place-items:center}
+.pin .bdg svg{width:9px;height:9px;stroke:#fff;stroke-width:2.6;fill:none}
+.pin .qb{position:absolute;right:-3px;top:-3px;width:16px;height:16px;border-radius:50%;background:var(--surface);border:1.5px solid var(--border);display:grid;place-items:center;color:var(--ink2)}
+.pin .qb svg{width:9px;height:9px}
+.pin.cleared{opacity:.5}.pin.cleared .dot{background:var(--success)!important}
+.pin.new .dot{animation:pop .45s var(--ease)}
+@keyframes pop{0%{transform:scale(0)}70%{transform:scale(1.25)}100%{transform:scale(1)}}
+.udot{position:absolute;transform:translate(-50%,-50%);width:16px;height:16px;border-radius:50%;background:var(--route);border:3px solid var(--surface);box-shadow:var(--e1);z-index:4}
+.udot::after{content:"";position:absolute;inset:-9px;border-radius:50%;border:2px solid var(--route);opacity:.5;animation:pulse 2.2s ease-out infinite}
+@keyframes pulse{0%{transform:scale(.5);opacity:.6}100%{transform:scale(1.4);opacity:0}}
+.srpill{position:absolute;top:52px;left:14px;right:14px;z-index:20;display:flex;align-items:center;gap:10px;background:var(--raised);border:1px solid var(--border);border-radius:999px;padding:12px 16px;box-shadow:var(--e2);font-size:14px;color:var(--ink2)}
+.srpill svg{width:18px;height:18px;color:var(--ink2)}
+.srpill .bell{margin-left:auto;position:relative;color:var(--ink)}
+.srpill .bell i{position:absolute;top:-4px;right:-5px;width:9px;height:9px;background:var(--danger);border-radius:99px;border:2px solid var(--raised)}
+.mapboxbtns{position:absolute;right:12px;bottom:206px;z-index:20;display:flex;flex-direction:column;gap:10px}
+.mbt{width:48px;height:48px;border-radius:var(--r-m);background:var(--raised);border:1px solid var(--border);box-shadow:var(--e1);display:grid;place-items:center;color:var(--ink2)}
+.mbt svg{width:21px;height:21px}
+.obanner{position:absolute;top:104px;left:14px;right:14px;z-index:21;display:none;align-items:center;gap:8px;background:var(--warning-sf);color:var(--warning);border:1px solid var(--warning);border-radius:var(--r-m);padding:9px 12px;font-size:12.5px;font-weight:700}
+.obanner.on{display:flex}
+.legend{position:absolute;left:12px;bottom:206px;z-index:20}
+.legbtn{display:flex;align-items:center;gap:7px;background:var(--raised);border:1px solid var(--border);border-radius:999px;padding:9px 14px;font-size:12px;font-weight:700;box-shadow:var(--e1)}
+.legcard{display:none;background:var(--raised);border:1px solid var(--border);border-radius:var(--r-l);box-shadow:var(--e2);padding:12px 14px;width:196px}
+.legend.open .legcard{display:block}.legend.open .legbtn{display:none}
+.lrow{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--ink2);padding:3.5px 0}
+.lpin{width:16px;height:16px;border-radius:50%;border:2px solid var(--surface);box-shadow:var(--e1);flex:none}
+.lpin.d{background:var(--danger)}.lpin.w{background:var(--warning)}.lpin.c{background:var(--caution)}
+.lpin.dash{border-style:dashed;background:var(--surface)}
+.lsh{width:15px;height:15px;border-radius:50%;background:var(--brand-ink);display:grid;place-items:center;flex:none}
+.lsh svg{width:8px;height:8px;stroke:#fff;stroke-width:3;fill:none}
+.lln{width:20px;height:0;border-top:3px solid var(--advisory);border-top-style:dashed;flex:none}
+.lln.rt2{border-top:4px solid var(--route);border-top-style:solid}
+#vc{position:absolute;left:14px;right:14px;bottom:96px;z-index:25;background:var(--raised);border:1px solid var(--border);border-left:4px solid var(--warning);border-radius:var(--r-l);box-shadow:var(--e2);padding:14px;display:none}
+#vc.on{display:block}
+#vc .t{font-weight:800;font-size:14px;display:flex;gap:8px;align-items:center}
+#vc .t svg{color:var(--warning);width:18px;height:18px}
+#vc .s{font-size:12px;color:var(--ink2);margin:3px 0 11px}
+#vc .acts{display:flex;gap:8px}
+#vc .acts .btn{min-height:42px;font-size:13.5px}
+#vc .x{position:absolute;top:8px;right:8px;color:var(--ink2);width:30px;height:30px;display:grid;place-items:center}
+#coach{position:absolute;top:150px;left:50%;transform:translateX(-50%);z-index:22;background:var(--brand-ink);color:#fff;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:999px;box-shadow:var(--e2);opacity:0;transition:opacity .4s;pointer-events:none;white-space:nowrap}
+#coach.on{opacity:1}
+#lyrPop{position:absolute;right:12px;bottom:316px;z-index:26;display:none;background:var(--raised);border:1px solid var(--border);border-radius:var(--r-l);box-shadow:var(--e2);padding:8px;width:210px}
+#lyrPop.on{display:block}
+.lrow2{display:flex;align-items:center;gap:10px;padding:9px 8px;font-size:13px;font-weight:600;border-radius:8px}
+.lrow2:hover{background:var(--neutral-sf)}
+.sw{margin-left:auto;width:36px;height:21px;border-radius:99px;background:var(--neutral-sf);position:relative;transition:background .2s;flex:none}
+.sw::after{content:"";position:absolute;top:2.5px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:var(--e1);transition:transform .2s var(--ease)}
+.sw.on{background:var(--primary)}
+.sw.on::after{transform:translateX(14px)}
+#fabmenu{position:absolute;right:16px;bottom:110px;z-index:35;display:none;flex-direction:column;gap:8px;width:216px}
+#fabmenu.on{display:flex}
+#fabmenu button{display:flex;gap:10px;align-items:center;background:var(--raised);border:1px solid var(--border);border-radius:var(--r-m);padding:13px 14px;font-weight:700;font-size:13.5px;box-shadow:var(--e2);text-align:left}
+#fabmenu button svg{color:var(--primary)}
+/* sheet */
+.backdrop{position:absolute;inset:0;background:rgba(8,14,22,.38);z-index:24;opacity:0;pointer-events:none;transition:opacity .25s}
+.backdrop.on{opacity:1;pointer-events:auto}
+.sheet{position:absolute;left:0;right:0;bottom:0;height:84%;z-index:28;background:var(--surface);border-radius:20px 20px 0 0;box-shadow:var(--e3);transform:translateY(102%);transition:transform .28s var(--ease);display:flex;flex-direction:column}
+.sheet.peek{transform:translateY(calc(100% - 128px))}
+.sheet.half{transform:translateY(46%)}
+.sheet.full{transform:translateY(4%)}
+.grab{padding:9px 0 5px;display:grid;place-items:center;cursor:pointer;flex:none}
+.grab span{width:40px;height:5px;border-radius:99px;background:var(--border)}
+.shbody{overflow-y:auto;padding:2px 18px 18px}
+.shbody h3{font-size:17px;font-weight:800}
+.shrow{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:5px}
+.shsub{font-size:12.5px;color:var(--ink2);margin-bottom:12px}
+.photo{height:150px;border-radius:var(--r-m);background:linear-gradient(135deg,var(--brand-surface),var(--neutral-sf));display:flex;flex-direction:column;gap:6px;align-items:center;justify-content:center;color:var(--ink2);font-size:12px;font-weight:600;margin-bottom:12px}
+.photo svg{width:26px;height:26px}
+.tline{border-left:2px solid var(--border);margin:10px 0 14px 6px;padding-left:14px}
+.tline .te{position:relative;padding-bottom:11px;font-size:12.5px}
+.tline .te::before{content:"";position:absolute;left:-20px;top:3px;width:9px;height:9px;border-radius:99px;background:var(--neutral)}
+.tline .te:first-child::before{background:var(--primary)}
+.tline .te b{display:block;font-size:13px}
+.cmt{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
+.cmt .av{width:30px;height:30px;border-radius:50%;background:var(--brand-surface);color:var(--primary);display:grid;place-items:center;font-weight:800;font-size:12px;flex:none}
+.cmt .ag{color:var(--advisory);font-weight:700}
+.crow{display:flex;gap:8px;margin-top:12px}
+.crow .in{min-height:44px}
+.shacts{padding:10px 18px 14px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;flex:none;background:var(--surface)}
+.shacts .pair{display:flex;gap:8px}
+.shacts .btn{min-height:46px;font-size:14px}
+.agc{border:1.5px solid var(--advisory)!important;background:var(--advisory-sf)!important;color:var(--advisory)!important}
+/* onboarding / auth */
+.onb{position:absolute;inset:0;background:var(--bg);z-index:45;display:flex;flex-direction:column}
+.onb .skip{position:absolute;top:50px;right:16px;z-index:2;color:var(--ink2);font-weight:700;font-size:13.5px;padding:8px}
+.oslides{flex:1;display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none}
+.oslides::-webkit-scrollbar{display:none}
+.osl{flex:0 0 100%;scroll-snap-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 34px;text-align:center;gap:16px}
+.oart{width:190px;height:190px;border-radius:50%;background:var(--brand-surface);display:grid;place-items:center;margin-bottom:8px}
+.oart svg{width:88px;height:88px;stroke:var(--primary);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.odots{display:flex;gap:7px;justify-content:center;padding:14px}
+.odots i{width:7px;height:7px;border-radius:99px;background:var(--border);transition:all .2s}
+.odots i.on{background:var(--primary);width:20px}
+.onb .ft{padding:0 24px 44px}
+.permrow{display:flex;gap:14px;align-items:center;padding:16px 0;border-bottom:1px solid var(--border)}
+.permrow .ic2{width:44px;height:44px;border-radius:var(--r-m);background:var(--brand-surface);color:var(--primary);display:grid;place-items:center;flex:none}
+.permrow .ic2 svg{width:22px;height:22px}
+.logo{display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:26px}
+.logomark{width:74px;height:74px;border-radius:22px;background:var(--primary);display:grid;place-items:center;box-shadow:var(--e2)}
+.logomark svg{width:40px;height:40px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.logo b{font-size:21px;font-weight:800;letter-spacing:-.3px}
+.logo span{font-size:13px;color:var(--ink2)}
+.aclink{text-align:center;margin-top:18px;font-size:13px;color:var(--ink2)}
+.aclink b{color:var(--primary);cursor:pointer}
+.pwstr{display:flex;gap:5px;margin-top:7px}
+.pwstr i{height:4px;flex:1;border-radius:99px;background:var(--border)}
+.pwstr i.on{background:var(--success)}
+.okwrap{position:absolute;inset:0;z-index:48;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:0 40px}
+.okwrap.on{display:flex}
+.okc{width:88px;height:88px;border-radius:50%;background:var(--success-sf);color:var(--success);display:grid;place-items:center;animation:pop .5s var(--ease)}
+.okc svg{width:44px;height:44px;stroke-width:2.6}
+.okc.blue{background:var(--brand-surface);color:var(--primary)}
+/* report */
+.rephead{display:flex;align-items:center;gap:10px;padding:48px 16px 10px}
+.rephead .h2{flex:1}
+.steps{display:flex;gap:6px;padding:0 16px 14px}
+.steps i{height:4px;flex:1;border-radius:99px;background:var(--border)}
+.steps i.on{background:var(--primary)}
+.rstep{display:none;padding:6px 16px 20px}
+.rstep.on{display:block}
+.taggrid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.tagtile{display:flex;flex-direction:column;align-items:center;gap:7px;padding:14px 4px 11px;border:1.5px solid var(--border);border-radius:var(--r-m);background:var(--surface);font-size:11px;font-weight:700;color:var(--ink2)}
+.tagtile svg{width:23px;height:23px;stroke:var(--primary);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tagtile.on{border-color:var(--primary);background:var(--brand-surface);color:var(--primary)}
+.sevrow{display:flex;gap:8px;margin:10px 0 4px}
+.sevc{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;padding:11px 4px;border-radius:var(--r-m);border:1.5px solid var(--border);font-size:12.5px;font-weight:700;background:var(--surface)}
+.sevc i{width:9px;height:9px;border-radius:99px;flex:none}
+.sevc[data-s=passable] i{background:var(--caution)}.sevc[data-s=one_lane] i{background:var(--warning)}.sevc[data-s=impassable] i{background:var(--danger)}
+.sevc.on{border-color:var(--primary);background:var(--brand-surface)}
+.minimap{position:relative;height:170px;border-radius:var(--r-m);overflow:hidden;border:1px solid var(--border);margin:12px 0 6px}
+.minimap svg{position:absolute;inset:0;width:100%;height:100%}
+.minimap .mpin{position:absolute;width:22px;height:22px;transform:translate(-50%,-50%);border-radius:50%;background:var(--danger);border:2.5px solid #fff;box-shadow:var(--e1)}
+.minimap .acc{position:absolute;width:64px;height:64px;transform:translate(-50%,-50%);border-radius:50%;background:var(--route);opacity:.14}
+.gpsnote{display:flex;gap:7px;align-items:center;font-size:12px;color:var(--warning);font-weight:600;margin-top:8px}
+.pphoto{display:none;align-items:center;gap:10px;margin-top:10px;padding:10px;border:1px dashed var(--border);border-radius:var(--r-m);font-size:12.5px}
+.pphoto.on{display:flex}
+.pphoto .thumb{width:46px;height:46px;border-radius:8px;background:linear-gradient(135deg,var(--brand-surface),var(--neutral-sf));flex:none}
+.rv{padding:12px 0;border-bottom:1px solid var(--border);font-size:13.5px;display:flex;justify-content:space-between;gap:12px}
+.rv b{font-weight:700}.rv span{color:var(--ink2);text-align:right}
+/* route */
+.rtsheet{position:absolute;left:0;right:0;bottom:76px;z-index:22;background:var(--surface);border-radius:20px 20px 0 0;box-shadow:var(--e3);padding:10px 16px 18px;max-height:58%;overflow-y:auto;transition:transform .28s var(--ease)}
+.rtsheet.hid{transform:translateY(110%)}
+.rcard{border:1.5px solid var(--border);border-radius:var(--r-l);padding:14px;margin-top:10px;cursor:pointer;background:var(--surface)}
+.rcard.on{border-color:var(--primary);box-shadow:0 0 0 3px var(--brand-surface)}
+.rcard .rt1{display:flex;align-items:center;gap:10px}
+.rcard .sh{width:40px;height:40px;border-radius:var(--r-m);display:grid;place-items:center;flex:none}
+.rcard .sh svg{width:21px;height:21px}
+.rcard .sh.g{background:var(--success-sf);color:var(--success)}
+.rcard .sh.a{background:var(--warning-sf);color:var(--warning)}
+.rcard b{font-size:14.5px}
+.rcard .sc{margin-left:auto;text-align:right}
+.rcard .sc b{font-size:19px;display:block;line-height:1}
+.rcard .meta{display:flex;gap:12px;font-size:12px;color:var(--ink2);margin-top:8px;flex-wrap:wrap}
+.rcard .warnl{display:flex;gap:7px;align-items:center;margin-top:9px;font-size:12px;font-weight:700;color:var(--warning);background:var(--warning-sf);border-radius:8px;padding:7px 9px}
+.why{display:none;margin-top:10px;border-top:1px dashed var(--border);padding-top:10px}
+.why.on{display:block}
+.whyr{display:flex;gap:9px;align-items:center;font-size:12.5px;padding:5px 0;color:var(--ink2)}
+.navstrip{position:absolute;top:50px;left:14px;right:14px;z-index:26;display:none;align-items:center;gap:12px;background:var(--brand-ink);color:#fff;border-radius:var(--r-l);padding:12px 14px;box-shadow:var(--e2)}
+.navstrip.on{display:flex}
+.navstrip .turn{width:40px;height:40px;border-radius:var(--r-m);background:rgba(255,255,255,.14);display:grid;place-items:center}
+.navstrip b{font-size:15px;display:block}
+.navstrip small{opacity:.8;font-size:11.5px}
+.navstrip .end{margin-left:auto;background:#fff;color:var(--brand-ink);font-weight:800;font-size:13px;border-radius:99px;padding:8px 14px}
+.destpill{position:absolute;top:52px;left:14px;right:14px;z-index:24;display:flex;align-items:center;gap:10px;background:var(--raised);border:1px solid var(--border);border-radius:999px;padding:6px 8px 6px 16px;box-shadow:var(--e2)}
+.destpill input{border:none;background:none;flex:1;font-size:14px;min-height:40px}
+.destpill input:focus{outline:none}
+.recents{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+/* alerts */
+.achips{display:flex;gap:8px;padding:8px 20px 14px;overflow-x:auto;scrollbar-width:none}
+.achips::-webkit-scrollbar{display:none}
+.achips button{flex:none;padding:8px 15px;border-radius:999px;border:1.5px solid var(--border);font-size:12.5px;font-weight:700;color:var(--ink2);background:var(--surface)}
+.achips button.on{background:var(--brand-ink);border-color:var(--brand-ink);color:#fff}
+.alr{display:flex;gap:12px;padding:14px;border-bottom:1px solid var(--border)}
+.alr:last-child{border-bottom:none}
+.alr .ic2{width:40px;height:40px;border-radius:var(--r-m);display:grid;place-items:center;flex:none}
+.alr b{font-size:13.5px;display:block}
+.alr small{color:var(--ink2);font-size:12px}
+.alr .mini{display:flex;gap:8px;margin-top:9px}
+.alr .mini button{flex:1;min-height:36px;border-radius:8px;border:1.5px solid var(--border);font-weight:700;font-size:12.5px;background:var(--surface)}
+.alr .mini .a1{background:var(--danger-sf);border-color:var(--danger-sf);color:var(--danger)}
+.alr .mini .a2{background:var(--success-sf);border-color:var(--success-sf);color:var(--success)}
+.empty{display:flex;flex-direction:column;align-items:center;gap:12px;padding:60px 40px;text-align:center;color:var(--ink2)}
+.empty .ec{width:70px;height:70px;border-radius:50%;background:var(--success-sf);color:var(--success);display:grid;place-items:center}
+.empty .ec svg{width:34px;height:34px}
+/* profile */
+.pfhead{display:flex;gap:14px;align-items:center;padding:18px}
+.avatar{width:58px;height:58px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;font-weight:800;font-size:20px;flex:none}
+.stat3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:12px}
+.stat3 .st{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-m);padding:12px;text-align:center}
+.stat3 .st b{font-size:19px;display:block}
+.stat3 .st span{font-size:11px;color:var(--ink2)}
+.setrow{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--border);font-size:14px;font-weight:600}
+.setrow svg{color:var(--ink2)}
+.setrow .r{margin-left:auto;display:flex;align-items:center;gap:10px;font-weight:400;color:var(--ink2);font-size:13px}
+.seg{display:flex;background:var(--neutral-sf);border-radius:9px;padding:3px}
+.seg button{padding:5px 11px;border-radius:7px;font-size:12px;font-weight:700;color:var(--ink2)}
+.seg button.on{background:var(--surface);box-shadow:var(--e1);color:var(--ink)}
+input[type=range]{accent-color:var(--primary);width:130px}
+.disc{font-size:11.5px;color:var(--ink2);padding:16px;border:1px dashed var(--border);border-radius:var(--r-m);margin-top:16px;display:flex;gap:9px}
+.disc svg{flex:none;width:16px;height:16px;margin-top:2px}
+/* advisory builder */
+.advtools{position:absolute;left:14px;right:14px;bottom:26px;z-index:25;display:flex;gap:8px;align-items:center}
+.advtools .cnt{background:var(--raised);border:1px solid var(--border);border-radius:999px;padding:9px 14px;font-size:12.5px;font-weight:700;box-shadow:var(--e1)}
+.advtools .btn{width:auto;flex:1}
+/* toasts / dialog */
+#toasts{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:2000;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+.toast{background:var(--brand-ink);color:#fff;font-size:13px;font-weight:600;padding:11px 18px;border-radius:999px;box-shadow:var(--e3);animation:tin .25s var(--ease);max-width:88vw;text-align:center}
+.toast.g{background:var(--success)}.toast.w{background:var(--warning)}.toast.r{background:var(--danger)}
+[data-theme=dark] .toast{background:#2A3B52}
+[data-theme=dark] .toast.g{background:#1D5A38}[data-theme=dark] .toast.w{background:#6B4A0E}[data-theme=dark] .toast.r{background:#7A2A20}
+@keyframes tin{from{opacity:0;transform:translateY(10px)}}
+#dlg{position:fixed;inset:0;z-index:1500;display:none;place-items:center;background:rgba(8,14,22,.45)}
+#dlg.on{display:grid}
+.dbox{width:min(400px,92vw);background:var(--surface);border-radius:var(--r-l);box-shadow:var(--e3);padding:20px}
+.dbox h3{font-size:16px;margin-bottom:6px}
+.dbox .db{font-size:13.5px;color:var(--ink2);margin-bottom:14px}
+.dbox .dacts{display:flex;gap:9px}
+/* admin */
+#view-admin{display:none;min-height:calc(100vh - 53px)}
+#view-admin.on{display:block}
+.admin{display:grid;grid-template-columns:236px 1fr;background:var(--bg);min-height:calc(100vh - 53px)}
+.aside{background:var(--surface);border-right:1px solid var(--border);padding:18px 12px;display:flex;flex-direction:column;gap:2px;position:sticky;top:53px;height:calc(100vh - 53px)}
+.aside .alogo{display:flex;gap:9px;align-items:center;padding:4px 10px 18px;font-weight:800;font-size:15.5px}
+.aside .alogo svg{width:24px;height:24px;stroke:var(--primary)}
+.aside .alogo small{display:block;font-size:10.5px;color:var(--ink2);font-weight:600}
+.anav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:var(--r-s);font-size:13.5px;font-weight:600;color:var(--ink2);width:100%;text-align:left}
+.anav:hover{background:var(--neutral-sf)}
+.anav.on{background:var(--brand-surface);color:var(--primary)}
+.anav svg{width:18px;height:18px}
+.anav .n{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px;border-radius:99px;padding:1px 7px}
+.auser{margin-top:auto;display:flex;gap:10px;align-items:center;padding:10px;border-top:1px solid var(--border)}
+.auser .avatar{width:36px;height:36px;font-size:13px}
+.auser b{font-size:13px;display:block}.auser span{font-size:11px;color:var(--ink2)}
+.amain{padding:22px 28px 60px;max-width:1200px}
+.atop{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+.atop h1{font-size:21px;font-weight:800;flex:1}
+.atop .in{max-width:280px;min-height:40px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:12px;margin-bottom:18px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-l);padding:16px}
+.stat span{font-size:12px;color:var(--ink2);font-weight:600;display:block}
+.stat b{font-size:26px;font-weight:800;display:block;margin-top:4px;font-variant-numeric:tabular-nums}
+.stat i{font-style:normal;font-size:11.5px;font-weight:700}
+.i-g{color:var(--success)}.i-r{color:var(--danger)}
+.acard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-l);padding:18px;margin-bottom:16px}
+.acard h3{font-size:14.5px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.acard h3 svg{width:17px;height:17px;color:var(--ink2)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.req{display:flex;gap:14px;padding:14px 0;border-bottom:1px solid var(--border);align-items:center}
+.req:last-child{border:none}
+.req .info{flex:1}
+.req b{font-size:14px}.req .m{font-size:12.5px;color:var(--ink2);margin-top:2px}
+.req .acts{display:flex;gap:8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink2);padding:9px 10px;border-bottom:1.5px solid var(--border)}
+td{padding:11px 10px;border-bottom:1px solid var(--border)}
+tbody tr:hover td{background:var(--neutral-sf)}
+tbody tr[data-user]{cursor:pointer}
+.mmap{position:relative;height:230px;border-radius:var(--r-m);overflow:hidden;border:1px solid var(--border)}
+.mmap svg{position:absolute;inset:0;width:100%;height:100%}
+.mmap .pin{z-index:2}
+.livedot{width:8px;height:8px;border-radius:99px;background:var(--success);display:inline-block;margin-right:6px;animation:pulse2 1.6s infinite}
+@keyframes pulse2{50%{opacity:.35}}
+.drawer{position:fixed;top:53px;right:0;bottom:0;width:380px;max-width:92vw;background:var(--surface);border-left:1px solid var(--border);box-shadow:var(--e3);z-index:900;transform:translateX(105%);transition:transform .28s var(--ease);overflow-y:auto;padding:22px}
+.drawer.on{transform:none}
+.drawer .dh{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.drawer h3{flex:1;font-size:16px}
+.kv{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;gap:10px}
+.kv span{color:var(--ink2)}
+.aud{display:inline-block;font-size:10.5px;font-weight:800;border-radius:6px;padding:2px 8px}
+.aud.ap{background:var(--success-sf);color:var(--success)}.aud.rj{background:var(--danger-sf);color:var(--danger)}
+.aud.up{background:var(--brand-surface);color:var(--primary)}.aud.sy{background:var(--neutral-sf);color:var(--ink2)}
+.tblwrap{overflow-x:auto}
+.modphoto{width:74px;height:74px;border-radius:var(--r-m);background:linear-gradient(135deg,var(--brand-surface),var(--neutral-sf));flex:none;display:grid;place-items:center;color:var(--ink2)}
+</style>
+</head><body>
+
+<svg style="position:absolute;width:0;height:0" aria-hidden="true"><defs>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.5-4.5"/></symbol>
+<symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M10.3 21a2 2 0 0 0 3.4 0"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7l10-5Z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></symbol>
+<symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="2"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></symbol>
+<symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16 8-2.5 5.5L8 16l2.5-5.5L16 8Z"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3Z"/><path d="m9 12 2 2 4-4"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></symbol>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-5.4-7-11a7 7 0 0 1 14 0c0 5.6-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1Z"/><path d="M4 22v-7"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-5 7-5s7 1.5 7 5"/><circle cx="17" cy="9" r="2.5"/><path d="M19.5 15.5c1.7.7 2.5 2 2.5 4.5"/></symbol>
+<symbol id="i-scroll" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+<symbol id="i-gauge" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m12 12 4-4"/></symbol>
+<symbol id="i-dl" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></symbol>
+<symbol id="i-shieldc" viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3Z"/><path d="m9 11.5 2 2 4-4.5"/></symbol>
+<symbol id="i-turn" viewBox="0 0 24 24"><path d="M9 20V9a4 4 0 0 1 4-4h5"/><path d="m15 2 3 3-3 3"/></symbol>
+<symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h6a4 4 0 0 0 0-8H9a4 4 0 0 1 0-8h1"/></symbol>
+<symbol id="t-flood" viewBox="0 0 24 24"><path d="M3 10c2.2 0 2.2 1.6 4.5 1.6S9.8 10 12 10s2.2 1.6 4.5 1.6S18.8 10 21 10"/><path d="M3 15c2.2 0 2.2 1.6 4.5 1.6s2.3-1.6 4.5-1.6 2.2 1.6 4.5 1.6S18.8 15 21 15"/><path d="M3 20c2.2 0 2.2 1.6 4.5 1.6s2.3-1.6 4.5-1.6 2.2 1.6 4.5 1.6S18.8 20 21 20"/></symbol>
+<symbol id="t-pothole" viewBox="0 0 24 24"><path d="M4 15a8 4.5 0 1 0 16 0 8 4.5 0 1 0-16 0"/><path d="m11 5-1.5 3 2.5 1.5"/></symbol>
+<symbol id="t-accident" viewBox="0 0 24 24"><path d="M4 16v-3l2-4.5A2 2 0 0 1 7.8 7h8.4a2 2 0 0 1 1.8 1.5L20 13v3"/><path d="M4 13h16M7 16v2.5M17 16v2.5M2.5 16h19"/></symbol>
+<symbol id="t-obstruction" viewBox="0 0 24 24"><path d="M12 4 5 20h14L12 4Z"/><path d="M9.3 13.5h5.4M8 17h8"/></symbol>
+<symbol id="t-landslide" viewBox="0 0 24 24"><path d="M4 20h16M4 5l7 5"/><circle cx="9" cy="14" r="1.7"/><circle cx="14" cy="16.5" r="2"/><circle cx="17.5" cy="10.5" r="2.3"/></symbol>
+<symbol id="t-tree" viewBox="0 0 24 24"><path d="M12 3 7 11h3l-4 6h12l-4-6h3L12 3Z"/><path d="M12 17v4"/></symbol>
+<symbol id="t-collapse" viewBox="0 0 24 24"><path d="M8 3l3 5-4 3 5 4-3 6"/><path d="m14 4 2 3M15 12l3 2"/></symbol>
+<symbol id="t-other" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></symbol>
+<g id="citymap">
+<rect class="l" x="-20" y="-20" width="440" height="890"/>
+<path class="w" d="M298 0c14 60-8 120 6 180s-6 120 8 180-8 130 6 190-6 130 8 194l-16 100H390V0Z"/>
+<path class="wv" d="M40 0c30 40 20 80 60 110s90 20 130 50 55 38 72 42"/>
+<ellipse class="pk" cx="70" cy="640" rx="56" ry="40"/><ellipse class="pk" cx="238" cy="622" rx="44" ry="27"/>
+<g class="rd"><path d="M110 40V815"/><path d="M200 40V815"/><path d="M260 40V815"/><path d="M60 240V770"/><path d="M30 200H290"/><path d="M30 360H292"/><path d="M30 480H286"/><path d="M30 540H290"/><path d="M30 680H292"/><path d="M30 742H290"/><path d="M120 120H280"/><path d="M40 62H288"/></g>
+<g class="rdm"><path d="M30 140H302"/><path d="M30 300H300"/><path d="M30 424H304"/><path d="M150 40V818"/><path d="M260 40V818"/><path d="M30 640 150 424 260 300 306 234"/></g>
+<text class="lb" x="44" y="291">QUEZON BLVD</text><text class="lb" x="44" y="415">REAL ST</text>
+<text class="lb" x="44" y="131">RIZAL AVE</text><text class="lb" x="157" y="560" transform="rotate(-90 157 560)">ROMUALDEZ ST</text>
+<text class="lb" x="268" y="585" transform="rotate(-90 268 585)">MAIN BLVD</text>
+<text class="lb big" x="34" y="704">TACLOBAN CITY</text><text class="lb" x="180" y="186">SAGKAHAN</text>
+<text class="lb wt" x="304" y="700" transform="rotate(-90 304 700)">CANCABATO BAY</text>
+<g class="adv"><path class="advL" d="M260 372V520"/><text class="advT" x="270" y="448">ROADWORK</text>
+<path class="advZ" d="M58 452 150 444 162 534 70 550Z"/><text class="advT" x="66" y="498">FLOOD-PRONE ZONE</text></g>
+</g>
+</defs></svg>
+
+<header id="proto">
+ <div class="lg"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><use href="#i-shieldc"/></svg>RouteGuard <span style="color:#6b7684;font-weight:600">· UI prototype v0.1.1</span></div>
+ <div class="tgl" id="pvtabs"><button class="on" data-v="phone">📱 Phone</button><button data-v="admin">🖥 Admin desktop</button></div>
+ <span class="lblx">Persona</span>
+ <select id="ppers"><option value="guest">Guest</option><option value="resident" selected>Resident (common)</option><option value="agency">LGU Agency</option><option value="admin">Admin</option></select>
+ <span class="lblx">Jump</span>
+ <select id="pjump"><option value="map">Map home</option><option value="onboard">Onboarding</option><option value="welcome">Welcome</option><option value="report">Report flow</option><option value="route">Route planner</option><option value="alerts">Alerts</option><option value="profile">Profile</option><option value="advisory">Advisory builder</option><option value="adminview">→ Admin view</option></select>
+ <button class="pbtn" id="poff">● Offline: off</button>
+ <button class="pbtn" id="ptheme">◐ Light</button>
+ <button class="pbtn" id="preset">↺ Reset</button>
+</header>
+
+<main id="view-phone">
+<div class="phone"><div class="pstatus"><span>9:41</span><span class="sig">
+<svg width="46" height="12" viewBox="0 0 46 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="1" width="3" height="11" rx="1"/><path d="M25 4a7 7 0 0 1 8 0l-1.4 1.7a5 5 0 0 0-5.2 0Zm2.6 3.2a3.4 3.4 0 0 1 2.8 0L29 9.6Z"/><rect x="36" y="2" width="9" height="8" rx="2" fill="none" stroke="currentColor"/><rect x="38" y="4" width="4" height="4" rx=".5"/></svg>
+</span></div>
+<div class="pscreens">
+
+<section class="scr on" id="s-map">
+ <div class="mapwrap" id="mapwrap">
+  <svg class="base" viewBox="0 0 390 844" preserveAspectRatio="xMidYMid slice" id="mapsvg"><use href="#citymap"/></svg>
+  <svg class="ovl" viewBox="0 0 390 844"><g id="uAdv"></g></svg>
+  <div class="pins" id="mapPins"></div>
+ </div>
+ <div class="srpill" id="srpill"><svg class="ic"><use href="#i-search"/></svg>Search a place or address<button class="bell" id="bellBtn" aria-label="Alerts"><svg class="ic"><use href="#i-bell"/></svg><i id="bellDot"></i></button></div>
+ <div class="obanner" id="obanner"><svg class="ic" style="width:16px;height:16px"><use href="#i-warn"/></svg>Offline — showing cached map · Last sync 12:04</div>
+ <div id="coach">Tap any pin for details</div>
+ <div class="mapboxbtns">
+  <button class="mbt" id="locBtn" aria-label="Locate me"><svg class="ic"><use href="#i-locate"/></svg></button>
+  <button class="mbt" id="lyrBtn" aria-label="Layers"><svg class="ic"><use href="#i-layers"/></svg></button>
+ </div>
+ <div id="lyrPop">
+  <div class="lrow2" id="lySat"><svg class="ic" style="width:17px;height:17px"><use href="#i-layers"/></svg>Satellite</div>
+  <div class="lrow2" id="lyAdv">Advisories<span class="sw on" id="swAdv"></span></div>
+  <div class="lrow2" id="lyDS">Data saver<span class="sw on"></span></div>
+ </div>
+ <div class="legend" id="legend">
+  <button class="legbtn" id="legBtn"><svg class="ic" style="width:15px;height:15px"><use href="#i-layers"/></svg>Legend</button>
+  <div class="legcard">
+   <div class="lrow"><span class="lpin d"></span>Impassable</div>
+   <div class="lrow"><span class="lpin w"></span>One lane only</div>
+   <div class="lrow"><span class="lpin c"></span>Passable with care</div>
+   <div class="lrow"><span class="lpin dash"></span>Unconfirmed (single report)</div>
+   <div class="lrow"><span class="lsh"><svg viewBox="0 0 24 24"><use href="#i-shieldc"/></svg></span>LGU-verified</div>
+   <div class="lrow"><span class="lln"></span>Official advisory</div>
+   <div class="lrow"><span class="lln rt2"></span>Your route</div>
+  </div>
+ </div>
+ <div id="vc">
+  <button class="x" id="vcX"><svg class="ic" style="width:16px;height:16px"><use href="#i-x"/></svg></button>
+  <div class="t"><svg class="ic"><use href="#i-warn"/></svg><span>Flood reported 120 m ahead</span></div>
+  <div class="s">Quezon Blvd · reported 14:02 · you're within 500 m — can you confirm?</div>
+  <div class="acts"><button class="btn d" id="vcA">Hazard Active</button><button class="btn b2" id="vcC" style="color:var(--success);border-color:var(--success)">Hazard Cleared</button></div>
+ </div>
+ <div class="backdrop" id="hback"></div>
+ <div class="sheet" id="hsheet">
+  <div class="grab" id="hgrab"><span></span></div>
+  <div class="shbody" id="hbody"></div>
+  <div class="shacts" id="hacts"></div>
+ </div>
+ <div id="fabmenu">
+  <button id="fmReport"><svg class="ic"><use href="#i-plus"/></svg>Report a hazard</button>
+  <button id="fmAdv" style="display:none"><svg class="ic"><use href="#i-flag"/></svg>Create advisory</button>
+  <button id="fmAdmin" style="display:none"><svg class="ic"><use href="#i-gauge"/></svg>Open admin dashboard</button>
+ </div>
+</section>
+
+<section class="scr" id="s-route">
+ <div class="mapwrap">
+  <svg class="base" viewBox="0 0 390 844"><use href="#citymap"/></svg>
+  <svg class="ovl" viewBox="0 0 390 844"><g id="routeOvl" style="display:none">
+   <path class="rtc" id="rt-safe-c" d="M200 380 130 330 95 250 140 180 240 150 305 170"/><path class="rt" id="rt-safe" d="M200 380 130 330 95 250 140 180 240 150 305 170"/>
+   <path class="rtc" id="rt-fast-c" style="display:none" d="M200 380 172 300 205 245 305 170"/><path class="rt" id="rt-fast" style="display:none" d="M200 380 172 300 205 245 305 170"/>
+   <circle cx="305" cy="170" r="9" fill="var(--primary)" stroke="var(--surface)" stroke-width="3.5"/>
+   <text x="305" y="146" text-anchor="middle" style="fill:var(--brand-ink);font:800 11px var(--f)">Robinsons Tacloban</text>
+  </g></svg>
+  <div class="pins" id="rPins"></div>
+ </div>
+ <div class="destpill"><button id="rtBack"><svg class="ic"><use href="#i-back"/></svg></button><input id="dest" placeholder="Where to?"><button class="btn sm" id="goBtn" style="min-height:38px">Go</button></div>
+ <div class="navstrip" id="navstrip"><span class="turn"><svg class="ic"><use href="#i-turn"/></svg></span><span><b>In 400 m, turn left onto Real St</b><small id="nsEta">18 min · 4.2 km · Safety 89</small></span><button class="end" id="endNav">End</button></div>
+ <div class="rtsheet" id="rtsheet">
+  <div style="width:40px;height:5px;border-radius:99px;background:var(--border);margin:2px auto 12px"></div>
+  <div id="rtHome">
+   <div class="h2">Plan a safe route</div>
+   <div class="sub" style="margin:3px 0 12px">Routes weigh every live hazard and LGU advisory.</div>
+   <div class="recents">
+    <span class="hint">Recent:</span>
+    <button class="chip p" data-d="Robinsons Tacloban">Robinsons Tacloban</button>
+    <button class="chip" data-d="Tacloban City Hall">City Hall</button>
+    <button class="chip" data-d="Gaisano Capital">Gaisano Capital</button>
+   </div>
+  </div>
+  <div id="rtCards" style="display:none">
+   <div class="rcard" id="rc-safe">
+    <div class="rt1"><span class="sh g"><svg class="ic"><use href="#i-shieldc"/></svg></span><span><b>Safest</b><div class="hint">Recommended</div></span><span class="sc"><b class="tnum" style="color:var(--success)">89</b><span class="hint">Low risk</span></span></div>
+    <div class="meta"><span>🚶 18 min</span><span>4.2 km</span><span>⚠ 2 hazards (passable)</span></div>
+    <button class="whyb btn sm b2" style="margin-top:9px">Why this score?</button>
+    <div class="why" id="whyBox"><div class="whyr">🟡 Pothole · one lane · Real St — adds 6 min detour weight</div><div class="whyr">🟠 Obstruction · passable · Dela Paz — minor</div><div class="whyr">✅ Avoids impassable flood on Quezon Blvd entirely</div></div>
+   </div>
+   <div class="rcard" id="rc-fast">
+    <div class="rt1"><span class="sh a"><svg class="ic"><use href="#i-bolt"/></svg></span><span><b>Fastest</b><div class="hint">Shorter, riskier</div></span><span class="sc"><b class="tnum" style="color:var(--warning)">62</b><span class="hint">Moderate</span></span></div>
+    <div class="meta"><span>🚶 14 min</span><span>3.8 km</span><span>⚠ 1 hazard on route</span></div>
+    <div class="warnl"><svg class="ic" style="width:14px;height:14px"><use href="#i-warn"/></svg>Passes 1 impassable flood (Quezon Blvd)</div>
+   </div>
+   <button class="btn" id="startBtn" style="margin-top:12px" disabled>Start safe route</button>
+  </div>
+ </div>
+</section>
+
+<section class="scr page" id="s-alerts" style="padding-top:52px">
+ <div class="h1" style="margin:4px 0 2px">Alerts</div>
+ <div class="sub" style="margin-bottom:6px">Proximity, verification requests and LGU advisories.</div>
+ <div class="achips" style="padding:14px 0 6px">
+  <button class="on" data-f="all">All</button><button data-f="nearby">Nearby</button><button data-f="verify">Verifications</button><button data-f="adv">Advisories</button>
+ </div>
+ <div id="alrList" class="card" style="padding:4px 14px">
+  <div class="alr" data-c="nearby"><span class="ic2" style="background:var(--danger-sf);color:var(--danger)"><svg class="ic"><use href="#i-warn"/></svg></span><div style="flex:1"><b>Flood 300 m ahead</b><small>Quezon Blvd · impassable · 2 min ago</small></div></div>
+  <div class="alr" data-c="verify"><span class="ic2" style="background:var(--warning-sf);color:var(--warning)"><svg class="ic"><use href="#i-pin"/></svg></span><div style="flex:1"><b>Can you confirm this hazard?</b><small>Pothole on Real St · 5 similar reports — needs verification</small>
+   <div class="mini"><button class="a1">Hazard Active</button><button class="a2">Hazard Cleared</button></div></div></div>
+  <div class="alr" data-c="adv"><span class="ic2" style="background:var(--advisory-sf);color:var(--advisory)"><svg class="ic"><use href="#i-flag"/></svg></span><div style="flex:1"><b>LGU advisory: road closure</b><small>Real St closed for roadwork until Fri 5 PM · official</small></div></div>
+  <div class="alr" data-c="nearby"><span class="ic2" style="background:var(--warning-sf);color:var(--warning)"><svg class="ic"><use href="#i-warn"/></svg></span><div style="flex:1"><b>Obstruction 1.1 km away</b><small>Dela Paz St · passable · 4 h ago</small></div></div>
+  <div class="alr" data-c="rep"><span class="ic2" style="background:var(--warning-sf);color:var(--gold)"><svg class="ic"><use href="#i-shieldc"/></svg></span><div style="flex:1"><b>+5 reputation</b><small>Your flood report on Quezon Blvd was approved</small></div></div>
+ </div>
+ <div class="empty" id="alrEmpty" style="display:none"><span class="ec"><svg class="ic"><use href="#i-shieldc"/></svg></span><b style="color:var(--ink)">You're in the clear</b>No alerts in this category.</div>
+ <div class="empty" id="alrGuest" style="display:none"><span class="ec" style="background:var(--brand-surface);color:var(--primary)"><svg class="ic"><use href="#i-user"/></svg></span><b style="color:var(--ink)">Sign in for personal alerts</b>Proximity and verification alerts need an account.</div>
+</section>
+
+<section class="scr page" id="s-profile">
+ <div id="pfGuest" style="display:none">
+  <div class="empty" style="padding-top:110px"><span class="ec" style="background:var(--brand-surface);color:var(--primary)"><svg class="ic"><use href="#i-user"/></svg></span><b style="color:var(--ink)">You're browsing as a guest</b>Sign in to report hazards, confirm reports and earn reputation.</div>
+  <button class="btn" data-go="login" style="max-width:300px;margin:0 auto">Sign in</button>
+ </div>
+ <div id="pfMain">
+  <div class="h1" style="margin:2px 0 14px">Profile</div>
+  <div class="card pfhead">
+   <span class="avatar" id="pfAv">MS</span>
+   <div style="flex:1"><b style="font-size:16.5px" id="pfName">Maria Santos</b><div style="margin:3px 0 7px"><span class="chip" id="pfBadge">Community member</span></div><div class="hint">Member since Jan 2026</div></div>
+  </div>
+  <div class="card" style="padding:16px;margin-top:12px">
+   <div style="display:flex;align-items:baseline;gap:8px"><b style="font-size:26px" class="tnum" id="pfPts">40</b><span class="hint">reputation points</span><span class="chip gd" style="margin-left:auto">Trusted Reporter</span></div>
+   <div class="meter" style="margin-top:10px"><i id="pfMeter" style="width:40%"></i></div>
+   <div class="hint" style="margin-top:7px" id="pfNext">20 pts to Trusted Reporter</div>
+   <button class="btn sm b2" id="pfWhy" style="margin-top:12px">How reputation works</button>
+   <div id="pfWhyBox" style="display:none;font-size:12.5px;color:var(--ink2);margin-top:10px;line-height:1.7">+5 · approved hazard report<br>+5 · confirmation upheld by community<br>−2 · your report cleared by others<br>−10 · report mass-cleared by 3+ users<br><br>Recent: <b style="color:var(--gold)">+5</b> flood report approved (2 d ago) · <b style="color:var(--success)">+5</b> confirmation upheld (5 d ago)</div>
+  </div>
+  <div class="stat3">
+   <div class="st"><b class="tnum">7</b><span>Reports posted</span></div>
+   <div class="st"><b class="tnum">23</b><span>Confirmations</span></div>
+   <div class="st"><b class="tnum">14</b><span>Helpful votes</span></div>
+  </div>
+  <div class="card" style="padding:4px 16px;margin-top:12px">
+   <div class="setrow"><svg class="ic"><use href="#i-bolt"/></svg>Data saver<span class="r"><span class="sw on" id="swDS"></span></span></div>
+   <div class="setrow"><svg class="ic"><use href="#i-layers"/></svg>Theme<span class="r"><span class="seg" id="segTh"><button data-th="light" class="on">Light</button><button data-th="dark">Dark</button></span></span></div>
+   <div class="setrow"><svg class="ic"><use href="#i-bell"/></svg>Alert radius<span class="r"><output id="radV" style="font-weight:700;color:var(--ink)">500 m</output><input type="range" id="setRad" min="100" max="1000" step="50" value="500"></span></div>
+   <div class="setrow"><svg class="ic"><use href="#i-camera"/></svg>Photo quality<span class="r">Compressed (0.3 MB)</span></div>
+  </div>
+  <button class="btn b2" id="pfAdminBtn" style="margin-top:12px;display:none"><svg class="ic"><use href="#i-gauge"/></svg>Open admin dashboard</button>
+  <button class="btn g" id="pfOut" style="margin-top:6px"><svg class="ic"><use href="#i-out"/></svg>Sign out</button>
+  <div class="disc"><svg class="ic"><use href="#i-shield"/></svg><span>Community reports are unverified unless confirmed by the LGU. In emergencies, follow official LGU and PAGASA guidance.</span></div>
+  <div class="hint" style="text-align:center;margin-top:14px">RouteGuard v0.1 · About · Privacy</div>
+ </div>
+</section>
+
+<section class="scr ontop" id="s-report">
+ <div class="rephead"><button id="repX"><svg class="ic"><use href="#i-x"/></svg></button><span class="h2">Report a hazard</span><span class="chip" id="repStepLbl">Step 1 of 3</span></div>
+ <div class="steps"><i class="on" id="rs1"></i><i id="rs2"></i><i id="rs3"></i></div>
+ <div class="rstep on" id="rstep1">
+  <div class="sub" style="margin-bottom:12px">What do you see? Pick the closest match.</div>
+  <div class="taggrid" id="tagGrid"></div>
+  <button class="btn" id="repNext1" disabled style="margin-top:16px">Continue</button>
+ </div>
+ <div class="rstep" id="rstep2">
+  <div class="sub">How bad is it?</div>
+  <div class="sevrow">
+   <button class="sevc" data-s="passable"><i></i>Passable</button>
+   <button class="sevc on" data-s="one_lane"><i></i>One lane</button>
+   <button class="sevc" data-s="impassable"><i></i>Impassable</button>
+  </div>
+  <button class="btn b2" id="photoBtn" style="margin-top:14px"><svg class="ic"><use href="#i-camera"/></svg>Add photo (optional)</button>
+  <div class="pphoto" id="pphoto"><span class="thumb"></span><span style="flex:1"><b>IMG_2043.jpg</b><div class="hint">Compressed to 0.3 MB for upload</div></span><button id="photoX"><svg class="ic" style="width:16px;height:16px"><use href="#i-x"/></svg></button></div>
+  <div class="field" style="margin-top:14px"><label>Description (optional)</label><textarea class="in" id="rdesc" maxlength="140" placeholder="e.g. Water at knee level, both lanes affected"></textarea><div class="hint" style="text-align:right"><span id="rdescN">0</span>/140</div></div>
+  <label style="font-size:12.5px;font-weight:700;color:var(--ink2)">Location</label>
+  <div class="minimap" id="minimap">
+   <svg viewBox="90 250 210 170"><use href="#citymap"/></svg>
+   <span class="acc" id="mAcc" style="left:50%;top:50%"></span><span class="mpin" id="mPin" style="left:50%;top:50%"></span>
+  </div>
+  <div class="hint">Tap the mini-map to adjust · <b class="tnum">11.2442° N, 125.0041° E</b></div>
+  <div class="gpsnote" id="gpsnote" style="display:none"><svg class="ic" style="width:15px;height:15px"><use href="#i-warn"/></svg>Location unsure (±80 m) — drag the pin to adjust</div>
+  <button class="btn" id="repNext2" style="margin-top:16px">Review report</button>
+ </div>
+ <div class="rstep" id="rstep3">
+  <div class="sub" style="margin-bottom:8px">Confirm your report</div>
+  <div class="rv"><b>Hazard</b><span id="rvTag">—</span></div>
+  <div class="rv"><b>Severity</b><span id="rvSev">—</span></div>
+  <div class="rv"><b>Photo</b><span id="rvPhoto">None</span></div>
+  <div class="rv"><b>Location</b><span>Quezon Blvd area (GPS ±8 m)</span></div>
+  <div class="rv" id="rvDup" style="display:none"><b>Similar reports</b><span style="color:var(--warning)">3 nearby — yours strengthens the alert</span></div>
+  <div class="hint" style="margin:12px 0">Your report appears on the map immediately and is visible to everyone nearby. False reporting lowers your reputation.</div>
+  <button class="btn" id="rsubmit">Submit report</button>
+ </div>
+ <div class="okwrap" id="rok"><span class="okc"><svg class="ic"><use href="#i-check"/></svg></span><span class="h2">Report submitted</span><span class="sub">Visible to everyone nearby now</span><span class="chip gd">+5 pts — pending approval</span></div>
+</section>
+
+<section class="scr ontop" id="s-advisory">
+ <div class="rephead"><button id="advX"><svg class="ic"><use href="#i-x"/></svg></button><span class="h2">Create advisory</span><span class="chip v">LGU official</span></div>
+ <div class="steps"><i class="on" id="as1"></i><i id="as2"></i><i id="as3"></i></div>
+ <div class="rstep on" id="advstep1">
+  <div class="sub" style="margin-bottom:12px">What kind of advisory is this?</div>
+  <div class="taggrid" id="advTypes" style="grid-template-columns:1fr 1fr">
+   <button class="tagtile" data-at="road_closure"><svg><use href="#t-obstruction"/></svg>Road closure</button>
+   <button class="tagtile" data-at="roadwork"><svg><use href="#t-collapse"/></svg>Roadwork</button>
+   <button class="tagtile" data-at="flood_zone"><svg><use href="#t-flood"/></svg>Flood-prone zone</button>
+   <button class="tagtile" data-at="event"><svg><use href="#t-other"/></svg>Event / traffic</button>
+  </div>
+ </div>
+ <div class="rstep" id="advstep2" style="position:absolute;inset:0;padding:0">
+  <div class="mapwrap" id="advmap">
+   <svg class="base" viewBox="0 0 390 844"><use href="#citymap"/></svg>
+   <svg class="ovl" viewBox="0 0 390 844"><g id="advDraw"></g></svg>
+  </div>
+  <div class="srpill" style="top:110px;font-size:12.5px" id="advHint">Tap along the affected road to trace it</div>
+  <div class="advtools">
+   <span class="cnt tnum" id="advCount">0 pts</span>
+   <button class="btn b2" id="advUndo" style="flex:0 0 auto">Undo</button>
+   <button class="btn b2" id="advClear" style="flex:0 0 auto">Clear</button>
+   <button class="btn" id="advDone" disabled>Done</button>
+  </div>
+ </div>
+ <div class="rstep" id="advstep3">
+  <div class="field"><label>Title</label><input class="in" id="atTitle" placeholder="e.g. Real St roadwork — lane closure"></div>
+  <div class="field"><label>Description</label><textarea class="in" id="atDesc" placeholder="Details the public should know"></textarea></div>
+  <div class="field"><label>Schedule</label>
+   <div class="sevrow" style="margin:0" id="advSched">
+    <button class="sevc on" data-sc="now">Now + 2 h</button><button class="sevc" data-sc="custom">Custom</button><button class="sevc" data-sc="open">Open-ended</button>
+   </div></div>
+  <div class="hint" style="margin:10px 0 14px">Published advisories appear instantly for all users and are treated as authoritative in routing.</div>
+  <button class="btn" id="advPublish" style="background:var(--advisory)">Publish advisory</button>
+ </div>
+</section>
+
+<section class="scr ontop" id="s-onboard">
+ <div class="onb">
+  <button class="skip" id="obSkip">Skip</button>
+  <div class="oslides" id="oslides">
+   <div class="osl"><div class="oart"><svg viewBox="0 0 24 24"><use href="#i-map"/></svg></div><span class="h1">See road hazards around you</span><span class="sub">Floods, potholes and accidents reported by your community and the LGU — live on one map.</span></div>
+   <div class="osl"><div class="oart"><svg viewBox="0 0 24 24"><use href="#i-camera"/></svg></div><span class="h1">Report in 3 taps</span><span class="sub">Pick a tag, set severity, done. A photo helps but is never required.</span></div>
+   <div class="osl"><div class="oart"><svg viewBox="0 0 24 24"><use href="#i-route"/></svg></div><span class="h1">Routes that avoid danger</span><span class="sub">Navigation weighs every hazard and LGU advisory so you get home the safe way.</span></div>
+  </div>
+  <div class="odots" id="odots"><i class="on"></i><i></i><i></i></div>
+  <div class="ft"><button class="btn" id="obNext">Next</button></div>
+ </div>
+</section>
+
+<section class="scr ontop" id="s-perms">
+ <div class="page" style="padding-top:70px">
+  <div class="h1">A few things to allow</div>
+  <div class="sub" style="margin:4px 0 8px">These make RouteGuard useful. You can change them later in Settings.</div>
+  <div class="permrow"><span class="ic2"><svg class="ic"><use href="#i-locate"/></svg></span><div style="flex:1"><b style="font-size:14px">Location</b><div class="hint">Show hazards near you and place your reports on the map</div></div><button class="btn sm b2" data-perm="loc">Allow</button></div>
+  <div class="permrow"><span class="ic2"><svg class="ic"><use href="#i-bell"/></svg></span><div style="flex:1"><b style="font-size:14px">Notifications</b><div class="hint">Alert you when a hazard is within 500 m of you</div></div><button class="btn sm b2" data-perm="notif">Allow</button></div>
+  <div class="hint" style="margin:14px 0 18px">Denied something? RouteGuard still works — you can browse the map and report with a manual pin.</div>
+  <button class="btn" id="permGo">Continue</button>
+ </div>
+</section>
+
+<section class="scr" id="s-welcome">
+ <div class="page" style="display:flex;flex-direction:column;justify-content:center;min-height:100%">
+  <div class="logo"><span class="logomark"><svg viewBox="0 0 24 24"><use href="#i-shieldc"/></svg></span><b>RouteGuard</b><span>Road hazards, reported and routed around.</span></div>
+  <button class="btn" data-go="register">Create account</button>
+  <button class="btn b2" data-go="login" style="margin-top:10px">Sign in</button>
+  <button class="btn g" id="guestBtn">Continue as guest</button>
+  <div class="aclink">LGU or agency personnel? <b data-go="agency">Request access</b></div>
+ </div>
+</section>
+
+<section class="scr" id="s-login">
+ <div class="backbar"><button data-go="welcome"><svg class="ic"><use href="#i-back"/></svg></button><span class="h2">Sign in</span></div>
+ <div class="page" style="padding-top:8px">
+  <div class="field"><label>Email</label><input class="in" type="email" value="maria.s@gmail.com"></div>
+  <div class="field"><label>Password</label><input class="in" type="password" value="demo1234" id="pwIn"><label style="display:flex;gap:8px;margin-top:8px;font-weight:400;cursor:pointer"><input type="checkbox" id="pwShow" style="accent-color:var(--primary)"> Show password</label></div>
+  <button class="btn" id="loginBtn">Sign in</button>
+  <div class="aclink">No account yet? <b data-go="register">Create one</b></div>
+  <div class="hint" style="text-align:center;margin-top:10px">Demo: any credentials work.</div>
+ </div>
+</section>
+
+<section class="scr" id="s-register">
+ <div class="backbar"><button data-go="welcome"><svg class="ic"><use href="#i-back"/></svg></button><span class="h2">Create account</span></div>
+ <div class="page" style="padding-top:8px">
+  <div class="field"><label>Full name</label><input class="in" value="Maria Santos"></div>
+  <div class="field"><label>Email</label><input class="in" type="email" placeholder="you@email.com"></div>
+  <div class="field"><label>Password</label><input class="in" type="password" id="regPw" value="santos2026"><div class="pwstr" id="pwstr"><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div><div class="hint" style="margin-top:5px">Good — add a symbol to make it strong.</div></div>
+  <button class="btn" id="regBtn">Create account</button>
+  <div class="aclink">Already registered? <b data-go="login">Sign in</b></div>
+ </div>
+ <div class="okwrap" id="regOk"><span class="okc blue"><svg class="ic"><use href="#i-bell"/></svg></span><span class="h2">Check your email</span><span class="sub">We sent a verification link to your inbox.</span><button class="btn" style="max-width:260px" id="regVerified">I verified — open the app</button><button class="btn g" style="max-width:260px">Resend link</button></div>
+</section>
+
+<section class="scr" id="s-agency">
+ <div class="backbar"><button data-go="welcome"><svg class="ic"><use href="#i-back"/></svg></button><span class="h2">Agency access</span></div>
+ <div class="page" style="padding-top:8px">
+  <div class="sub" style="margin-bottom:14px">For LGU/agency personnel. Verified accounts can publish official advisories and authoritative confirmations.</div>
+  <div class="field"><label>Full name</label><input class="in" value="Kevin T. Bautista"></div>
+  <div class="field"><label>Agency</label><select class="in"><option>DPWH</option><option>City Government of Tacloban</option><option>DOT</option><option>BFP</option><option>PNP</option><option>Other…</option></select></div>
+  <div class="field"><label>Role / title</label><input class="in" value="Traffic Aide"></div>
+  <div class="field"><label>Agency ID number</label><input class="in" value="DPWH-00482"></div>
+  <div class="field"><label>Purpose</label><textarea class="in">Hazard verification along the national highway.</textarea></div>
+  <button class="btn" id="agencyBtn">Submit request</button>
+ </div>
+ <div class="okwrap" id="agencyOk"><span class="okc blue"><svg class="ic"><use href="#i-clock"/></svg></span><span class="h2">Request pending</span><span class="sub">An administrator will review your credentials. We'll notify you when decided.</span><span class="chip a">Under review · submitted just now</span><button class="btn b2" style="max-width:260px" id="agencyApproveSim">Simulate approval (demo)</button><button class="btn g" style="max-width:260px" data-go="map">Back to map</button></div>
+</section>
+
+</div><!-- /pscreens -->
+<nav id="pnav">
+ <button class="nv on" data-t="map"><svg class="ic"><use href="#i-map"/></svg>Map</button>
+ <button class="nv" data-t="alerts"><svg class="ic"><use href="#i-bell"/></svg>Alerts<i class="nd" id="navDot"></i></button>
+ <span id="fabwrap"><button id="fab" aria-label="Report"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><use href="#i-plus"/></svg></button><span id="fabl">Report</span></span>
+ <button class="nv" data-t="route"><svg class="ic"><use href="#i-compass"/></svg>Navigate</button>
+ <button class="nv" data-t="profile"><svg class="ic"><use href="#i-user"/></svg>Profile</button>
+</nav>
+</div>
+</main>
+
+<main id="view-admin">
+<div class="admin">
+ <aside class="aside">
+  <div class="alogo"><svg class="ic" style="width:24px;height:24px"><use href="#i-shieldc"/></svg><span>RouteGuard<small>LGU Admin Console</small></span></div>
+  <button class="anav on" data-ad="overview"><svg class="ic"><use href="#i-gauge"/></svg>Overview</button>
+  <button class="anav" data-ad="requests"><svg class="ic"><use href="#i-users"/></svg>Agency Requests<span class="n" id="reqN">3</span></button>
+  <button class="anav" data-ad="users"><svg class="ic"><use href="#i-user"/></svg>Users</button>
+  <button class="anav" data-ad="mod"><svg class="ic"><use href="#i-flag"/></svg>Moderation<span class="n">2</span></button>
+  <button class="anav" data-ad="audit"><svg class="ic"><use href="#i-scroll"/></svg>Audit Logs</button>
+  <div class="auser"><span class="avatar">RV</span><div><b>R. Villanueva</b><span>Administrator</span></div></div>
+ </aside>
+ <div class="amain">
+  <div class="atop"><h1 id="adTitle">Overview</h1><input class="in" placeholder="Search…" id="adSearch" style="display:none"><button class="btn sm b2" id="toPhone">📱 Phone view</button></div>
+
+  <section class="asec" id="ad-overview">
+   <div class="stats">
+    <div class="stat"><span>Active hazards</span><b class="tnum">23</b><i class="i-r">▲ 4 today</i></div>
+    <div class="stat"><span>Reports · 24 h</span><b class="tnum">41</b><i class="i-g">▲ 12%</i></div>
+    <div class="stat"><span>Pending requests</span><b class="tnum">3</b><i class="i-r">Needs review</i></div>
+    <div class="stat"><span>Suspended users</span><b class="tnum">2</b><i>—</i></div>
+    <div class="stat"><span>DAU</span><b class="tnum">312</b><i class="i-g">▲ 8%</i></div>
+   </div>
+   <div class="g2">
+    <div class="acard"><h3><span class="livedot"></span>Live hazard map — Tacloban</h3>
+     <div class="mmap"><svg viewBox="20 80 330 600"><use href="#citymap"/></svg><div class="pins" id="admPins"></div></div>
+    </div>
+    <div class="acard"><h3><svg class="ic"><use href="#i-flag"/></svg>Latest advisories</h3>
+     <div id="ovAdvs"></div>
+     <button class="btn sm b2" style="margin-top:10px" data-act="newAdv">＋ New advisory</button>
+    </div>
+   </div>
+  </section>
+
+  <section class="asec" id="ad-requests" style="display:none">
+   <div class="acard"><h3><svg class="ic"><use href="#i-users"/></svg>Pending agency access requests</h3><div id="reqList"></div></div>
+  </section>
+
+  <section class="asec" id="ad-users" style="display:none">
+   <div class="acard">
+    <h3><svg class="ic"><use href="#i-user"/></svg>All users<button class="btn sm b2" style="margin-left:auto" data-act="csv" data-file="users"><svg class="ic" style="width:14px;height:14px"><use href="#i-dl"/></svg>CSV</button></h3>
+    <input class="in" id="usearch" placeholder="Search name, email…" style="margin-bottom:10px;min-height:40px">
+    <div class="tblwrap"><table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Points</th><th>Status</th><th>Joined</th></tr></thead><tbody id="userBody"></tbody></table></div>
+   </div>
+  </section>
+
+  <section class="asec" id="ad-mod" style="display:none">
+   <div class="acard"><h3><svg class="ic"><use href="#i-flag"/></svg>Reported / flagged hazards</h3><div id="modList"></div></div>
+   <div class="acard"><h3><svg class="ic"><use href="#i-layers"/></svg>Active advisories</h3><div id="modAdvs"></div></div>
+  </section>
+
+  <section class="asec" id="ad-audit" style="display:none">
+   <div class="acard">
+    <h3><svg class="ic"><use href="#i-scroll"/></svg>Audit log — immutable<button class="btn sm b2" style="margin-left:auto" data-act="csv" data-file="audit"><svg class="ic" style="width:14px;height:14px"><use href="#i-dl"/></svg>CSV</button></h3>
+    <div class="tblwrap"><table><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th></tr></thead><tbody id="auditBody"></tbody></table></div>
+   </div>
+  </section>
+ </div>
+</div>
+<div class="drawer" id="uDraw"></div>
+</main>
+
+<div id="toasts"></div>
+<div id="dlg"><div class="dbox"><h3 id="dlgT"></h3><div class="db" id="dlgB"></div><div id="dlgX"></div><div class="dacts" id="dlgA"></div></div></div>
+<div id="errbox"></div>
+
+<script>
+(function(){
+'use strict';
+/* ---- error surface: any crash shows here instead of a silent white screen ---- */
+function showErr(m){var b=document.getElementById('errbox');if(!b)return;b.style.display='block';b.textContent='Prototype error: '+m;}
+window.addEventListener('error',function(e){showErr(e.message+(e.lineno?' (line '+e.lineno+')':''));});
+
+var $=function(s,r){return (r||document).querySelector(s);};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));};
+
+/* ================= DATA ================= */
+var TAGS={flood:'Flood',pothole:'Pothole',accident:'Accident',obstruction:'Obstruction',landslide:'Landslide',tree:'Fallen tree',collapse:'Road collapse',other:'Other'};
+var SEV={passable:['Passable','a'],one_lane:['One lane','a'],impassable:['Impassable','r']};
+var TRUST={single:'Unconfirmed',multi:'Corroborated',verified:'LGU verified',queued:'Queued (offline)'};
+var S={persona:'resident',theme:'light',offline:false,scr:'map',pts:40,route:null,tag:null,sev:'one_lane',photo:false,sheetId:null,advType:null,advPts:[]};
+
+var pins=[
+ {id:'h1',x:172,y:300,tag:'flood',sev:'impassable',trust:'single',t:'14:02',dist:'120 m',street:'Quezon Blvd',desc:'Water at knee level across both lanes near the divisoria. Two tricycles stalled.',who:'Maria S.',rep:'Community',photo:true,helps:6,comments:[['Jun A.','14:10','Passing here tomorrow — will confirm.'],['Ana L.','14:22','Tricycle stalled in the middle earlier.']]},
+ {id:'h2',x:150,y:424,tag:'pothole',sev:'one_lane',trust:'multi',t:'11:47',dist:'450 m',street:'Real St',desc:'Deep pothole right lane. Two motorcycles already swerved into traffic.',who:'Roland C.',rep:'Community',photo:false,helps:12,comments:[]},
+ {id:'h3',x:255,y:348,tag:'accident',sev:'impassable',trust:'verified',t:'12:30',dist:'800 m',street:'Justice Romualdez St',desc:'Two-vehicle collision, road fully blocked. Enforcers on site.',who:'LGU Tacloban',rep:'Agency',photo:true,helps:31,comments:[]},
+ {id:'h4',x:95,y:250,tag:'obstruction',sev:'passable',trust:'multi',t:'09:15',dist:'1.1 km',street:'Dela Paz St',desc:'Fallen branches on the shoulder, one lane open.',who:'Bea R.',rep:'Community',photo:false,helps:4,comments:[]}];
+var requests=[
+ {n:'Kevin T. Bautista',a:'DPWH',r:'Traffic Aide',id:'DPWH-00482',p:'Hazard verification along the national highway.',t:'2 h ago',st:'pending'},
+ {n:'Luisa Ramos',a:'City Government of Tacloban',r:'DRRM Officer',id:'CEO-1187',p:'Post-disaster road assessment and advisories.',t:'1 d ago',st:'pending'},
+ {n:'Marco Delgado',a:'LTO',r:'Enforcement Officer',id:'LTO-2231',p:'Road clearance coordination with LGU.',t:'3 d ago',st:'pending'}];
+var users=[
+ {n:'Maria Santos',e:'maria.s@gmail.com',r:'common',p:40,s:'active',j:'Jan 2026'},
+ {n:'Roland Cruz',e:'r.cruz@yahoo.com',r:'common',p:112,s:'active',j:'Nov 2025'},
+ {n:'Ana Lim',e:'ana.lim@outlook.com',r:'common',p:26,s:'active',j:'Feb 2026'},
+ {n:'LGU Tacloban DRRM',e:'drrm@tacloban.gov.ph',r:'agency',p:0,s:'active',j:'Aug 2025'},
+ {n:'Jun Aquino',e:'jun.aq@gmail.com',r:'common',p:-8,s:'suspended',j:'Dec 2025'},
+ {n:'Bea Reyes',e:'bea.r@gmail.com',r:'common',p:64,s:'active',j:'Mar 2026'}];
+var audit=[
+ ['12:04','System','Expired hazard','hz_1042','Lifetime reached 0 — auto-removed from map','sy'],
+ ['11:38','R. Villanueva','Approved advisory','Roadwork · Real St','Published by LGU DRRM account','ap'],
+ ['10:12','R. Villanueva','Suspended user','Jun Aquino','Reason: repeated false reporting (3rd strike)','rj']];
+var mods=[
+ {id:'hz_1077',tag:'Flood',why:'3 users marked cleared · reporter disputes',rep:'Maria S.',t:'2 h ago'},
+ {id:'hz_1069',tag:'Accident',why:'Duplicate of hz_1071',rep:'anon_4412',t:'5 h ago'}];
+var advs=[['Road closure · Real St','LGU DRRM','until Fri 5 PM'],['Roadwork · Quezon Blvd','DPWH','2 more days']];
+var rtHomeHTML='';
+
+/* ================= HELPERS ================= */
+function toast(m,k){var t=document.createElement('div');t.className='toast'+(k?' '+k:'');t.textContent=m;$('#toasts').appendChild(t);setTimeout(function(){t.remove();},2900);}
+function dlg(title,body,fields,actions){
+ $('#dlgT').textContent=title;$('#dlgB').textContent=body;
+ $('#dlgX').innerHTML=fields?'<div class="field"><label>'+fields[0]+'</label><textarea class="in" id="dlgF" placeholder="'+fields[1]+'"></textarea></div>':'';
+ var box=$('#dlgA');box.innerHTML='';
+ (actions||[]).forEach(function(a,i){
+  var b=document.createElement('button');
+  b.className='btn'+(i?' b2':'')+(a.d?' d':'');b.textContent=a.l;
+  b.addEventListener('click',function(){$('#dlg').classList.remove('on');var f=$('#dlgF');if(a.fn)a.fn(f?f.value.trim():'');});
+  box.appendChild(b);});
+ $('#dlg').classList.add('on');}
+function gate(){dlg('Sign in required','You need an account to do that. Browsing the map is always free.',null,
+ [{l:'Create account',fn:function(){go('register');}},{l:'Sign in',fn:function(){go('login');}},{l:'Not now',fn:null}]);}
+function addPts(n){S.pts=Math.max(0,S.pts+n);ptsSync();}
+function ptsSync(){$('#pfPts').textContent=S.pts;$('#pfMeter').style.width=Math.min(100,S.pts)+'%';
+ $('#pfNext').textContent=S.pts>=80?'Top tier — Trusted Reporter':(80-S.pts)+' pts to Trusted Reporter';}
+function initials(n){return n.split(' ').map(function(w){return w[0];}).slice(0,2).join('');}
+
+/* ================= PINS ================= */
+function pinHTML(p,idx){var cleared=p.cleared?' cleared':'',q=p.trust==='queued'?' queued':'';
+ return '<button class="pin '+p.sev+' '+p.trust+cleared+(p.isNew?' new':'')+'" data-p="'+idx+'" style="left:'+(p.x/390*100)+'%;top:'+(p.y/844*100)+'%">'
+ +'<span class="dot"><svg viewBox="0 0 24 24"><use href="#t-'+p.tag+'"/></svg></span>'
+ +(p.trust==='verified'?'<span class="bdg"><svg viewBox="0 0 24 24"><use href="#i-shieldc"/></svg></span>':'')
+ +(q?'<span class="qb"><svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:2.4"><use href="#i-clock"/></svg></span>':'')
+ +'</button>';}
+function udot(){return '<span class="udot" style="left:'+(200/390*100)+'%;top:'+(380/844*100)+'%"></span>';}
+function renderPins(){var h=pins.map(function(p,i){return pinHTML(p,i);}).join('');
+ $('#mapPins').innerHTML=h+udot();$('#rPins').innerHTML=h;$('#admPins').innerHTML=h;}
+
+/* ================= NAVIGATION ================= */
+function go(scr){S.scr=scr;
+ $$('.pscreens .scr').forEach(function(x){x.classList.toggle('on',x.id==='s-'+scr);});
+ var tab=(scr==='map'||scr==='alerts'||scr==='route'||scr==='profile');
+ $('#pnav').classList.toggle('on',tab);
+ $$('.nv').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-t')===scr);});
+ if(scr!=='map'){closeSheet();$('#fabmenu').classList.remove('on');}
+ if(scr==='alerts'){$('#bellDot').style.display='none';$('#navDot').style.display='none';applyPersona();}
+ if(scr==='profile')ptsSync();
+ if(scr==='route')resetRouteHome();}
+function switchView(v){$('#view-phone').style.display=(v==='phone')?'grid':'none';$('#view-admin').style.display=(v==='admin')?'block':'none';
+ $$('#pvtabs button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-v')===v);});}
+
+/* ================= PERSONA / OFFLINE / THEME ================= */
+function applyPersona(){var p=S.persona;
+ $('#pfGuest').style.display=(p==='guest')?'block':'none';
+ $('#pfMain').style.display=(p==='guest')?'none':'block';
+ var names={resident:['Maria Santos','MS','Community member'],agency:['Kevin Bautista','KB','LGU Agency — verified'],admin:['R. Villanueva','RV','Administrator']};
+ if(names[p]){$('#pfName').textContent=names[p][0];$('#pfAv').textContent=names[p][1];$('#pfBadge').textContent=names[p][2];
+  $('#pfBadge').className='chip'+(p==='resident'?'':' v');}
+ $('#pfAdminBtn').style.display=(p==='admin')?'flex':'none';
+ $('#fmAdv').style.display=(p==='agency')?'flex':'none';
+ $('#fmAdmin').style.display=(p==='admin')?'flex':'none';
+ $('#alrList').style.display=(p==='guest')?'none':'block';
+ $('#alrGuest').style.display=(p==='guest')?'flex':'none';
+ if(S.sheetId!==null)renderSheet(S.sheetId);}
+function setOffline(v){S.offline=v;$('#obanner').classList.toggle('on',v);
+ $('#poff').textContent='● Offline: '+(v?'on':'off');$('#poff').classList.toggle('on',v);
+ if(!v){var q=pins.filter(function(p){return p.trust==='queued';});
+  if(q.length){q.forEach(function(p){p.trust='single';});renderPins();toast('Synced '+q.length+' queued report'+(q.length>1?'s':''),'g');}}}
+function setTheme(t){S.theme=t;document.documentElement.setAttribute('data-theme',t);
+ $('#ptheme').textContent=(t==='light')?'◐ Light':'◑ Dark';
+ $$('#segTh button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-th')===t);});}
+
+/* ================= SHEET ================= */
+function openSheet(i){S.sheetId=i;renderSheet(i);setSheet('peek');}
+function setSheet(st){var s=$('#hsheet');s.classList.remove('peek','half','full');if(st)s.classList.add(st);
+ $('#hback').classList.toggle('on',!!st&&st!=='peek');}
+function closeSheet(){setSheet(null);S.sheetId=null;}
+function renderSheet(i){var p=pins[i];if(!p)return;
+ var g=(S.persona==='guest'),sev=SEV[p.sev];
+ var tl='<div class="te"><b>Reported</b>'+p.t+' · by '+p.who+'</div>';
+ if(p.trust==='multi'||p.trust==='verified')tl+='<div class="te"><b>Corroborated</b>2+ community confirmations</div>';
+ if(p.trust==='verified')tl+='<div class="te"><b>LGU verified</b>Confirmed by agency personnel</div>';
+ if(p.cleared)tl+='<div class="te"><b>Hazard cleared</b>Lifetime reduced — expiring soon</div>';
+ $('#hbody').innerHTML=
+  '<div class="shrow"><span class="chip p">'+TAGS[p.tag]+'</span><span class="chip '+sev[1]+'">'+sev[0]+'</span>'
+  +'<span class="chip '+(p.cleared?'gn':(p.trust==='single'?'':'p'))+'">'+(p.cleared?'Cleared':TRUST[p.trust])+'</span></div>'
+  +'<h3>'+TAGS[p.tag]+' — '+p.street+'</h3>'
+  +'<div class="shsub">'+p.dist+' away · reported '+p.t+(p.trust==='queued'?' · not yet synced':' · live')+'</div>'
+  +(p.photo?'<div class="photo"><svg class="ic"><use href="#i-camera"/></svg>Photo evidence · tap to enlarge<br><span class="hint">0.3 MB compressed</span></div>':'')
+  +'<p style="font-size:13.5px;margin-bottom:12px">'+p.desc+'</p>'
+  +'<div><span class="chip '+(p.rep==='Agency'?'v':'')+'">'+(p.rep==='Agency'?'LGU verified reporter':'Community reporter')+'</span></div>'
+  +'<div class="tline">'+tl+'</div>'
+  +'<button class="btn sm b2" id="helpBtn"'+(p.voted?' disabled':'')+'>👍 Helpful ('+p.helps+')</button>'
+  +'<div style="margin-top:16px"><b style="font-size:14px">Comments ('+p.comments.length+')</b><div id="cmts">'
+  +(p.comments.map(function(c){return '<div class="cmt"><span class="av">'+c[0][0]+'</span><div><b style="font-size:12.5px">'+c[0]+'</b> <span class="hint">· '+c[1]+'</span>'+(c[3]?' <span class="ag">· LGU</span>':'')+'<div>'+c[2]+'</div></div></div>';}).join('')||'<div class="hint" style="padding:10px 0">No comments yet.</div>')
+  +'</div><div class="crow"><input class="in" id="cmtIn" placeholder="Add a comment…"><button class="btn sm" id="cmtGo" style="min-height:44px">Send</button></div></div>'
+  +'<button class="btn g" style="margin-top:14px;font-size:12.5px" id="repFlag">⚠ Something is wrong with this report</button>';
+ var acts=$('#hacts');
+ if(g){acts.innerHTML='<button class="btn b2" id="gSign">Sign in to confirm or comment</button>';
+  $('#gSign').addEventListener('click',gate);}
+ else if(p.cleared){acts.innerHTML='<div class="hint" style="text-align:center;padding:4px">This hazard was marked cleared. Is it back?</div><div class="pair"><button class="btn d" id="aA">Hazard Active again</button></div>';
+  $('#aA').addEventListener('click',function(){p.cleared=false;p.trust='multi';renderPins();renderSheet(i);toast('Re-confirmed active — lifetime extended','w');});}
+ else{var ag=(S.persona==='agency');
+  acts.innerHTML='<div class="pair"><button class="btn '+(ag?'agc':'d')+'" id="aA">'+(ag?'Official confirm — Active':'Hazard Active')+'</button>'
+  +'<button class="btn '+(ag?'agc':'b2')+'" id="aC" style="'+(ag?'':'color:var(--success);border-color:var(--success)')+'">'+(ag?'Official confirm — Cleared':'Hazard Cleared')+'</button></div>';
+  $('#aA').addEventListener('click',function(){confirmHz(i,'active');});
+  $('#aC').addEventListener('click',function(){confirmHz(i,'cleared');});}
+ var hb=$('#helpBtn');if(hb)hb.addEventListener('click',function(){if(g)return gate();
+  if(!p.voted){p.helps++;p.voted=1;renderSheet(i);toast('Marked helpful');}});
+ var cg=$('#cmtGo');if(cg)cg.addEventListener('click',function(){if(g)return gate();
+  var v=$('#cmtIn').value.trim();if(!v)return;
+  p.comments.push([S.persona==='agency'?'LGU Tacloban':(S.persona==='admin'?'R. Villanueva':'You'),'now',v,S.persona==='agency']);
+  renderSheet(i);toast('Comment posted');});
+ var fl=$('#repFlag');if(fl)fl.addEventListener('click',function(){toast('Thanks — our moderators will review this report');});}
+function confirmHz(i,kind){var p=pins[i];if(!p)return;
+ if(S.persona==='guest')return gate();
+ if(kind==='active'){if(p.trust==='single')p.trust='multi';addPts(5);toast('Confirmed active — hazard lifetime extended (+5 pts)','g');}
+ else{p.cleared=true;addPts(5);toast('Confirmed cleared — lifetime reduced. Thanks!','g');}
+ renderPins();$('#vc').classList.remove('on');if(S.sheetId!==null)renderSheet(S.sheetId);}
+
+/* ================= REPORT ================= */
+function openReport(){if(S.persona==='guest')return gate();go('report');repStep(1);}
+function repStep(n){[1,2,3].forEach(function(i){var el=$('#rstep'+i);if(el)el.classList.toggle('on',i===n);
+ var b=$('#rs'+i);if(b)b.classList.toggle('on',i<=n);});
+ $('#repStepLbl').textContent='Step '+n+' of 3';}
+
+/* ================= ROUTE ================= */
+function resetRouteHome(){var h=$('#rtHome');if(!h)return;
+ if(rtHomeHTML)h.innerHTML=rtHomeHTML;
+ h.style.display='block';$('#rtCards').style.display='none';
+ $('#rtsheet').classList.remove('hid');$('#navstrip').classList.remove('on');
+ var o=$('#routeOvl');if(o)o.style.display='none';}
+function planRoute(){var d=$('#dest').value.trim();
+ if(!d){toast('Enter a destination or tap a recent','w');return;}
+ var h=$('#rtHome');h.innerHTML='<div class="hint" style="padding:20px 0;text-align:center">Finding routes and weighing hazards…</div>';
+ $('#routeOvl').style.display='none';
+ setTimeout(function(){h.style.display='none';$('#rtCards').style.display='block';toast('2 routes found — safest recommended');},700);}
+function selRoute(w){S.route=w;
+ ['rc-safe','rc-fast'].forEach(function(id){var el=$('#'+id);if(el)el.classList.toggle('on',id==='rc-'+w);});
+ $('#startBtn').disabled=false;
+ $('#rt-safe').style.display=$('#rt-safe-c').style.display=(w==='safe')?'':'none';
+ $('#rt-fast').style.display=$('#rt-fast-c').style.display=(w==='fast')?'':'none';
+ $('#routeOvl').style.display='';
+ $('#nsEta').textContent=(w==='safe')?'18 min · 4.2 km · Safety 89':'14 min · 3.8 km · Safety 62';}
+
+/* ================= ADVISORY ================= */
+function openAdvisory(){if(S.persona!=='agency'){toast('Advisory builder is for LGU agency accounts — switch persona','w');return;}
+ go('advisory');advStep(1);}
+function advStep(n){[1,2,3].forEach(function(i){var el=$('#advstep'+i);if(el)el.style.display=(i===n)?'block':'none';
+ var b=$('#as'+i);if(b)b.classList.toggle('on',i<=n);});}
+function drawAdv(){var P=S.advPts;$('#advCount').textContent=P.length+' pts';$('#advDone').disabled=P.length<2;
+ if(!P.length){$('#advDraw').innerHTML='';return;}
+ var line=P.map(function(p){return p[0].toFixed(0)+','+p[1].toFixed(0);}).join(' ');
+ var closed=(S.advType==='flood_zone'&&P.length>=3);
+ $('#advDraw').innerHTML=(closed?'<path class="advZ" d="M'+line+'Z" style="opacity:.9"/>':'<path class="advL" d="M'+line+'"/>')
+  +P.map(function(p){return '<circle cx="'+p[0]+'" cy="'+p[1]+'" r="5" fill="var(--advisory)" stroke="var(--surface)" stroke-width="2.5"/>';}).join('');}
+
+/* ================= ADMIN ================= */
+var ADT={overview:'Overview',requests:'Agency Requests',users:'Users',mod:'Moderation',audit:'Audit Logs'};
+function logAct(action,target,details,kind){audit.unshift([new Date().toTimeString().slice(0,5),'R. Villanueva',action,target,details,kind]);renderAudit();}
+function renderRequests(){$('#reqList').innerHTML=requests.map(function(r,i){
+ return '<div class="req"><span class="avatar" style="width:42px;height:42px;font-size:14px">'+initials(r.n)+'</span>'
+ +'<div class="info"><b>'+r.n+'</b><div class="m">'+r.a+' · '+r.r+' · ID '+r.id+'</div><div class="m">'+r.p+'</div><div class="m" style="opacity:.7">Submitted '+r.t+'</div></div>'
+ +'<div class="acts">'+(r.st==='pending'
+   ?'<button class="btn sm" data-act="appr" data-i="'+i+'">Approve</button><button class="btn sm d" data-act="rej" data-i="'+i+'">Reject</button>'
+   :'<span class="chip '+(r.st==='approved'?'gn':'r')+'">'+r.st+'</span>')+'</div></div>';}).join('');
+ var n=requests.filter(function(r){return r.st==='pending';}).length;
+ $('#reqN').textContent=n||'';$('#reqN').style.display=n?'':'none';}
+function renderUsers(f){f=(f||'').toLowerCase();
+ $('#userBody').innerHTML=users.filter(function(u){return !f||u.n.toLowerCase().indexOf(f)>-1||u.e.toLowerCase().indexOf(f)>-1;})
+ .map(function(u){var i=users.indexOf(u);
+  return '<tr data-user="'+i+'"><td><b>'+u.n+'</b></td><td>'+u.e+'</td><td><span class="chip '+(u.r==='agency'?'v':(u.r==='admin'?'p':''))+'">'+(u.r==='common'?'Community':u.r)+'</span></td><td class="tnum">'+u.p+'</td><td><span class="chip '+(u.s==='active'?'gn':'r')+'">'+u.s+'</span></td><td>'+u.j+'</td></tr>';}).join('');}
+function renderMod(){
+ $('#modList').innerHTML=mods.map(function(m,i){
+  return '<div class="req"><span class="modphoto"><svg class="ic"><use href="#i-camera"/></svg></span>'
+  +'<div class="info"><b>'+m.tag+' · '+m.id+'</b><div class="m">'+m.why+'</div><div class="m" style="opacity:.7">Reporter: '+m.rep+' · flagged '+m.t+'</div></div>'
+  +'<div class="acts"><button class="btn sm b2" data-act="modExpire" data-i="'+i+'">Expire</button><button class="btn sm d" data-act="modRemove" data-i="'+i+'">Remove</button><button class="btn sm b2" data-act="modDismiss" data-i="'+i+'">Dismiss</button></div></div>';}).join('')||'<div class="hint" style="padding:10px 0">Queue is clear. 🎉</div>';
+ $('#modAdvs').innerHTML=advs.map(function(a,i){
+  return '<div class="req"><div class="info"><b>'+a[0]+'</b><div class="m">'+a[1]+' · '+a[2]+'</div></div><button class="btn sm b2" data-act="advOff" data-i="'+i+'">Deactivate</button></div>';}).join('');
+ $('#ovAdvs').innerHTML=advs.slice(0,4).map(function(a){
+  return '<div class="req" style="padding:10px 0"><div class="info"><b style="font-size:13px">'+a[0]+'</b><div class="m">'+a[1]+' · '+a[2]+'</div></div><span class="chip gn">active</span></div>';}).join('');}
+function renderAudit(){$('#auditBody').innerHTML=audit.map(function(a){
+ return '<tr><td class="tnum">'+a[0]+'</td><td>'+a[1]+'</td><td><span class="aud '+a[5]+'">'+a[2]+'</span></td><td>'+a[3]+'</td><td class="hint">'+a[4]+'</td></tr>';}).join('');}
+function openUser(i){var u=users[i],d=$('#uDraw');
+ d.innerHTML='<div class="dh"><h3>User details</h3><button data-act="drawX"><svg class="ic"><use href="#i-x"/></svg></button></div>'
+ +'<div style="display:flex;gap:12px;align-items:center;margin-bottom:14px"><span class="avatar">'+initials(u.n)+'</span><div><b>'+u.n+'</b><div class="hint">'+u.e+'</div></div></div>'
+ +'<div class="kv"><span>Role</span><select class="in" style="width:150px;min-height:36px" id="uRole"><option value="common"'+(u.r==='common'?' selected':'')+'>Community</option><option value="agency"'+(u.r==='agency'?' selected':'')+'>Agency</option><option value="admin"'+(u.r==='admin'?' selected':'')+'>Admin</option></select></div>'
+ +'<div class="kv"><span>Status</span><span class="chip '+(u.s==='active'?'gn':'r')+'">'+u.s+'</span></div>'
+ +'<div class="kv"><span>Reputation</span><b class="tnum">'+u.p+' pts</b></div>'
+ +'<div class="kv"><span>Reports</span><span>7 posted · 23 confirmations</span></div>'
+ +'<div class="kv" style="border:none"><span>Member since</span><span>'+u.j+'</span></div>'
+ +'<div style="display:flex;gap:8px;margin-top:16px"><button class="btn sm d" id="uSusp">'+(u.s==='suspended'?'Reactivate':'Suspend user')+'</button><button class="btn sm b2" data-act="csv" data-file="history">Report history</button></div>'
+ +'<div class="hint" style="margin-top:14px">Reputation history: +5 report approved (Jan 12) · −2 cleared by others (Jan 3) · +5 confirmation upheld (Dec 28)</div>';
+ d.classList.add('on');
+ $('#uRole').addEventListener('change',function(e){var nr=e.target.value;
+  dlg('Change role?','Set '+u.n+'\u2019s role to "'+nr+'"? This is audit-logged.',null,
+  [{l:'Confirm',fn:function(){u.r=nr;renderUsers($('#usearch').value);logAct('Changed user role',u.n,'→ '+nr,'up');toast('Role updated','g');}},
+   {l:'Cancel',fn:function(){e.target.value=u.r;}}]);});
+ $('#uSusp').addEventListener('click',function(){
+  var susp=(u.s!=='suspended');
+  dlg(susp?'Suspend user':'Reactivate user',susp?'Provide a reason (sent to user + audit log):':'Restore access for '+u.n+'?',susp?['Reason','e.g. repeated false reporting']:null,
+  [{l:susp?'Suspend':'Reactivate',d:susp,fn:function(v){u.s=susp?'suspended':'active';renderUsers($('#usearch').value);d.classList.remove('on');
+    logAct(susp?'Suspended user':'Reactivated user',u.n,susp?('Reason: '+(v||'—')):'Access restored',susp?'rj':'ap');toast('User '+u.s,'g');}},
+   {l:'Cancel',fn:null}]);});}
+
+/* ================= GLOBAL CLICK ROUTER (delegation — cannot be broken by re-renders) ================= */
+document.addEventListener('click',function(e){
+ var t=e.target;function C(sel){return t.closest?t.closest(sel):null;}var c;
+ /* generic jumps */
+ if(c=C('[data-go]')){go(c.getAttribute('data-go'));return;}
+ if(c=C('#pvtabs button')){switchView(c.getAttribute('data-v'));return;}
+ if(c=C('#toPhone')){switchView('phone');return;}
+ if(c=C('.nv')){go(c.getAttribute('data-t'));return;}
+ if(c=C('.anav')){$$('.anav').forEach(function(x){x.classList.remove('on');});c.classList.add('on');
+  $$('.asec').forEach(function(s){s.style.display='none';});
+  var sec=$('#ad-'+c.getAttribute('data-ad'));if(sec)sec.style.display='block';
+  $('#adTitle').textContent=ADT[c.getAttribute('data-ad')]||'';
+  $('#adSearch').style.display=(c.getAttribute('data-ad')==='users')?'block':'none';return;}
+ /* map interactions */
+ if(c=C('.pin')){if(c.closest('#rPins')){toast('Hazard along your route — details on the Map tab');}
+  else if(c.closest('#admPins')){toast('Open the phone view to interact with pins');}
+  else{openSheet(+c.getAttribute('data-p'));}return;}
+ if(c=C('#bellBtn')){go('alerts');return;}
+ if(c=C('#srpill')){go('route');return;}
+ if(c=C('#locBtn')){toast('Location updated · ±8 m · accurate');return;}
+ if(c=C('#lyrBtn')){$('#lyrPop').classList.toggle('on');return;}
+ if(c=C('#lySat')){toast('Satellite imagery is data-saver gated — enable in Settings → Data saver','w');return;}
+ if(c=C('#swAdv')){c.classList.toggle('on');var on=c.classList.contains('on');
+  var m=$('#mapsvg');if(m)m.style.setProperty('--adv-o',on?'1':'0');
+  toast('Official advisories '+(on?'shown':'hidden'));return;}
+ if(c=C('#lyDS')){toast('Data saver: tiles capped at 200 MB, photos compressed');return;}
+ if(c=C('#legBtn')){$('#legend').classList.add('open');clearTimeout(window._legT);
+  window._legT=setTimeout(function(){$('#legend').classList.remove('open');},6000);return;}
+ if(c=C('#vcX')){$('#vc').classList.remove('on');return;}
+ if(c=C('#vcA')){confirmHz(0,'active');return;}
+ if(c=C('#vcC')){confirmHz(0,'cleared');return;}
+ if(c=C('#hback')){closeSheet();return;}
+ if(c=C('#hgrab')){var s=$('#hsheet'),order=['peek','half','full'],cur='peek';
+  for(var oi=0;oi<order.length;oi++)if(s.classList.contains(order[oi]))cur=order[oi];
+  setSheet(order[Math.min(order.indexOf(cur)+1,2)]);return;}
+ /* FAB + menu */
+ if(c=C('#fab')){var fm=$('#fabmenu');
+  if(S.persona==='guest')return gate();
+  if(S.persona==='resident'){openReport();return;}
+  fm.classList.toggle('on');return;}
+ if(c=C('#fmReport')){$('#fabmenu').classList.remove('on');openReport();return;}
+ if(c=C('#fmAdv')){$('#fabmenu').classList.remove('on');openAdvisory();return;}
+ if(c=C('#fmAdmin')){$('#fabmenu').classList.remove('on');switchView('admin');return;}
+ /* report flow */
+ if(c=C('#repX')){go('map');return;}
+ if(c=C('#repNext1')){repStep(2);return;}
+ if(c=C('#tagGrid .tagtile')){$$('#tagGrid .tagtile').forEach(function(x){x.classList.remove('on');});
+  c.classList.add('on');S.tag=c.getAttribute('data-tag');$('#repNext1').disabled=false;return;}
+ if(c=C('.sevc[data-s]')){$$('.sevc[data-s]').forEach(function(x){x.classList.remove('on');});
+  c.classList.add('on');S.sev=c.getAttribute('data-s');return;}
+ if(c=C('#photoBtn')){setTimeout(function(){$('#pphoto').classList.add('on');S.photo=true;},450);return;}
+ if(c=C('#photoX')){$('#pphoto').classList.remove('on');S.photo=false;return;}
+ if(c=C('#repNext2')){$('#rvTag').textContent=TAGS[S.tag]||'—';$('#rvSev').textContent=SEV[S.sev][0];
+  $('#rvPhoto').textContent=S.photo?'1 photo (0.3 MB)':'None';
+  $('#rvDup').style.display=(S.tag==='flood')?'flex':'none';repStep(3);return;}
+ if(c=C('#rsubmit')){var btn=c;btn.disabled=true;btn.textContent='Submitting…';
+  setTimeout(function(){var np={id:'n'+Date.now(),x:200,y:356,tag:S.tag||'other',sev:S.sev,trust:S.offline?'queued':'single',t:'now',dist:'you are here',street:'Quezon Blvd area',desc:$('#rdesc').value||'(no description)',who:'You',rep:'Community',photo:S.photo,helps:0,comments:[],isNew:true};
+   pins.unshift(np);renderPins();
+   if(S.offline){toast('Saved on device — will send when back online','w');go('map');}
+   else{addPts(5);$('#rok').classList.add('on');
+    setTimeout(function(){$('#rok').classList.remove('on');go('map');toast('Report is live — visible to everyone nearby','g');},1700);}
+   btn.disabled=false;btn.textContent='Submit report';},900);return;}
+ /* route */
+ if(c=C('#rtBack')){go('map');return;}
+ if(c=C('#goBtn')){planRoute();return;}
+ if(c=C('.recents .chip[data-d]')){$('#dest').value=c.getAttribute('data-d');planRoute();return;}
+ if(c=C('#rc-safe')){selRoute('safe');return;}
+ if(c=C('#rc-fast')){selRoute('fast');return;}
+ if(c=C('.whyb')){$('#whyBox').classList.toggle('on');return;}
+ if(c=C('#startBtn')){$('#rtsheet').classList.add('hid');$('#navstrip').classList.add('on');
+  setTimeout(function(){toast('Rerouting — new hazard reported ahead','w');},4000);return;}
+ if(c=C('#endNav')){$('#navstrip').classList.remove('on');$('#rtsheet').classList.remove('hid');go('map');toast('Navigation ended — hope you arrived safely');return;}
+ /* alerts */
+ if(c=C('.achips button')){$$('.achips button').forEach(function(x){x.classList.remove('on');});c.classList.add('on');
+  var f=c.getAttribute('data-f'),n=0;
+  $$('#alrList .alr').forEach(function(card){var show=(f==='all'||card.getAttribute('data-c')===f);card.style.display=show?'flex':'none';if(show)n++;});
+  $('#alrEmpty').style.display=n?'none':'flex';return;}
+ if(c=C('#alrList .mini button')){if(S.persona==='guest')return gate();
+  c.closest('.mini').innerHTML='<span class="chip gn">Thanks — recorded</span>';addPts(5);toast('Confirmation recorded (+5 pts)','g');return;}
+ /* profile */
+ if(c=C('#swDS')){c.classList.toggle('on');toast('Data saver '+(c.classList.contains('on')?'on — 200 MB tile cap':'off'));return;}
+ if(c=C('#segTh button')){setTheme(c.getAttribute('data-th'));return;}
+ if(c=C('#pfWhy')){var b=$('#pfWhyBox');b.style.display=(b.style.display==='none')?'block':'none';return;}
+ if(c=C('#pfAdminBtn')){switchView('admin');return;}
+ if(c=C('#pfOut')){S.persona='guest';$('#ppers').value='guest';applyPersona();go('map');toast('Signed out — browsing as guest');return;}
+ /* onboarding / auth */
+ if(c=C('#obNext')){var slides=$('#oslides'),idx=Math.round(slides.scrollLeft/390);
+  if(idx===2)go('perms');else slides.scrollTo({left:390*(idx+1),behavior:'smooth'});return;}
+ if(c=C('#obSkip')){go('perms');return;}
+ if(c=C('[data-perm]')){var chip=document.createElement('span');chip.className='chip gn';chip.textContent='Allowed';
+  c.replaceWith(chip);return;}
+ if(c=C('#permGo')){go('welcome');return;}
+ if(c=C('#guestBtn')){S.persona='guest';$('#ppers').value='guest';applyPersona();go('map');toast('Browsing as guest — sign in anytime to report');return;}
+ if(c=C('#loginBtn')){S.persona='resident';$('#ppers').value='resident';applyPersona();go('map');toast('Welcome back, Maria','g');return;}
+ if(c=C('#regBtn')){$('#regOk').classList.add('on');return;}
+ if(c=C('#regVerified')){$('#regOk').classList.remove('on');S.persona='resident';$('#ppers').value='resident';applyPersona();go('map');toast('Account verified — welcome to RouteGuard!','g');return;}
+ if(c=C('#agencyBtn')){$('#agencyOk').classList.add('on');return;}
+ if(c=C('#agencyApproveSim')){$('#agencyOk').classList.remove('on');S.persona='agency';$('#ppers').value='agency';applyPersona();go('map');
+  toast('Approved — you are now LGU Agency personnel','g');toast('Verified badge enabled on your reports and confirmations');return;}
+ /* advisory builder */
+ if(c=C('#advX')){go('map');return;}
+ if(c=C('#advTypes .tagtile')){$$('#advTypes .tagtile').forEach(function(x){x.classList.remove('on');});
+  c.classList.add('on');S.advType=c.getAttribute('data-at');S.advPts=[];drawAdv();advStep(2);
+  $('#advHint').textContent=(S.advType==='flood_zone')?'Tap the corners of the affected area':'Tap along the affected road to trace it';return;}
+ if(c=C('#advUndo')){S.advPts.pop();drawAdv();return;}
+ if(c=C('#advClear')){S.advPts=[];drawAdv();return;}
+ if(c=C('#advDone')){advStep(3);return;}
+ if(c=C('#advSched .sevc')){$$('#advSched .sevc').forEach(function(x){x.classList.remove('on');});c.classList.add('on');return;}
+ if(c=C('#advPublish')){var title=$('#atTitle').value.trim()||'Official advisory',P=S.advPts;
+  if(P.length<2){toast('Trace at least 2 points first','w');return;}
+  var line=P.map(function(p){return p[0].toFixed(0)+','+p[1].toFixed(0);}).join(' ');
+  var closed=(S.advType==='flood_zone'&&P.length>=3);
+  $('#uAdv').innerHTML+=(closed?'<path class="advZ" d="M'+line+'Z"/>':'<path class="advL" d="M'+line+'"/>')
+   +'<text class="advT" x="'+P[0][0]+'" y="'+(P[0][1]-8)+'">'+title.toUpperCase()+'</text>';
+  advs.unshift([title,'You','open-ended']);renderMod();
+  toast('Advisory published — visible to all users and weighted in routing','g');go('map');return;}
+ /* admin data-act buttons (delegated, works after every re-render) */
+ if(c=C('[data-act]')){var act=c.getAttribute('act')||c.getAttribute('data-act'),i=+c.getAttribute('data-i');
+  if(act==='appr'){requests[i].st='approved';renderRequests();logAct('Approved agency request',requests[i].n,requests[i].a+' — role set to agency_personnel','ap');toast(requests[i].n+' approved — notified to sign in','g');}
+  else if(act==='rej'){var ri=i;dlg('Reject request','Provide a reason (sent to the applicant):',['Reason','e.g. ID could not be verified'],
+   [{l:'Reject',d:1,fn:function(v){requests[ri].st='rejected';renderRequests();logAct('Rejected agency request',requests[ri].n,'Reason: '+(v||'—'),'rj');toast('Request rejected — applicant notified','r');}},{l:'Cancel',fn:null}]);}
+  else if(act==='modDismiss'){var m0=mods[i];mods.splice(i,1);renderMod();logAct('Dismissed flag',m0.id,'No violation found','sy');toast('Flag dismissed');}
+  else if(act==='modExpire'){var m1=mods[i];mods.splice(i,1);renderMod();logAct('Expired hazard',m1.id,'Moderator action','up');toast('Hazard expired and removed from map');}
+  else if(act==='modRemove'){var m2=mods[i];dlg('Remove report','Reason (reporter is notified and loses points):',['Reason','e.g. unverifiable — photo shows a different location'],
+   [{l:'Remove report',d:1,fn:function(v){mods.splice(i,1);renderMod();logAct('Removed hazard',m2.id,'Reason: '+(v||'—')+' — reporter notified, −10 pts','rj');toast('Report removed — reporter notified (−10 pts)','r');}},{l:'Cancel',fn:null}]);}
+  else if(act==='advOff'){c.closest('.req').style.opacity=.4;c.disabled=true;toast('Advisory deactivated — removed from maps','w');}
+  else if(act==='csv'){toast('Exported '+c.getAttribute('data-file')+'_2026-09-21.csv (demo)');}
+  else if(act==='newAdv'){toast('Advisory builder lives in the phone view → switch persona to LGU Agency','w');}
+  else if(act==='drawX'){$('#uDraw').classList.remove('on');}
+  return;}
+ if(c=C('tr[data-user]')){openUser(+c.getAttribute('data-user'));return;}
+ /* click on empty map closes layers popover */
+ if(c=C('#mapwrap')){$('#lyrPop').classList.remove('on');if(!t.closest('.pin'))closeSheet();return;}
+});
+
+/* ================= DIRECT BINDINGS (inputs & coordinate clicks) ================= */
+function bindEl(id,ev,fn){var el=document.getElementById(id);if(el)el.addEventListener(ev,fn);}
+bindEl('ppers','change',function(e){S.persona=e.target.value;applyPersona();toast('Persona: '+e.target.selectedOptions[0].text);});
+bindEl('pjump','change',function(e){var v=e.target.value;
+ if(v==='adminview'){switchView('admin');return;}
+ switchView('phone');go(v);if(v==='report')openReport();});
+bindEl('poff','click',function(){setOffline(!S.offline);});
+bindEl('ptheme','click',function(){setTheme(S.theme==='light'?'dark':'light');});
+bindEl('preset','click',function(){location.reload();});
+bindEl('pwShow','change',function(e){$('#pwIn').type=e.target.checked?'text':'password';});
+bindEl('rdesc','input',function(e){$('#rdescN').textContent=e.target.value.length;});
+bindEl('regPw','input',function(e){var v=e.target.value,l=v.length>=8?2:(v.length>=5?1:0),sx=/[^a-zA-Z0-9]/.test(v)?1:0;
+ $$('#pwstr i').forEach(function(b,i){b.classList.toggle('on',i<l+sx);});});
+bindEl('setRad','input',function(e){$('#radV').textContent=e.target.value+' m';});
+bindEl('usearch','input',function(e){renderUsers(e.target.value);});
+bindEl('dest','keydown',function(e){if(e.key==='Enter')planRoute();});
+bindEl('oslides','scroll',function(){var idx=Math.round($('#oslides').scrollLeft/390);
+ $$('#odots i').forEach(function(d,i){d.classList.toggle('on',i===idx);});
+ $('#obNext').textContent=(idx===2)?'Get started':'Next';});
+bindEl('minimap','click',function(e){var r=$('#minimap').getBoundingClientRect();
+ var x=(e.clientX-r.left)/r.width,y=(e.clientY-r.top)/r.height;
+ $('#mPin').style.left=(x*100)+'%';$('#mPin').style.top=(y*100)+'%';
+ $('#mAcc').style.left=$('#mPin').style.left;$('#mAcc').style.top=$('#mPin').style.top;
+ $('#gpsnote').style.display='flex';});
+bindEl('advmap','click',function(e){if(S.scr!=='advisory'||!S.advType)return;
+ var r=$('#advmap').getBoundingClientRect();
+ S.advPts.push([(e.clientX-r.left)/r.width*390,(e.clientY-r.top)/r.height*844]);drawAdv();});
+
+/* ================= INIT ================= */
+try{
+ $('#tagGrid').innerHTML=Object.keys(TAGS).map(function(k){
+  return '<button class="tagtile" data-tag="'+k+'"><svg viewBox="0 0 24 24"><use href="#t-'+k+'"/></svg>'+TAGS[k]+'</button>';}).join('');
+ rtHomeHTML=$('#rtHome').innerHTML;
+ renderPins();applyPersona();ptsSync();renderRequests();renderUsers();renderMod();renderAudit();
+ go('onboard');
+ setTimeout(function(){$('#coach').classList.add('on');setTimeout(function(){$('#coach').classList.remove('on');},3800);},900);
+}catch(err){showErr(err.message);}
+})();
+</script>
+</body></html>

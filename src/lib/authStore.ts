@@ -13,13 +13,13 @@ export const authError = writable<string | null>(null)
 export const profileLoading = writable<boolean>(false)
 export const profileError = writable<string | null>(null)
 
-let authListener: { unsubscribe: () => void } | null = null
+  let authListener: { data: { subscription: { unsubscribe: () => void } } } | null = null
 
 /** Initialize authentication with proper state management */
 export async function initAuth() {
   // Clean up any existing listener
   if (authListener) {
-    authListener.unsubscribe()
+    authListener?.data?.subscription?.unsubscribe()
     authListener = null
   }
 

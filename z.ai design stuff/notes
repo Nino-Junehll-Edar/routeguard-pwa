@@ -1,0 +1,439 @@
+All 7 consolidated — every delta from the Command Center, agency-pivot, and PWA drops is baked in. Copy each into its file and you're current.
+
+1. src/lib/components/core/MapCanvas.svelte
+Baked in: advisoryclick dispatch · selectedId prop + selection pulse ring · point+radius advisory circles · click handlers on all advisory geometry.
+
+svelte
+
+<script lang="ts">
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { TAGS, TACLOBAN, deriveTrust, toLatLng } from '$lib/constants';
+  import { ICONS, glyphSvg } from '$lib/icons';
+  import type { Hazard, Advisory, LatLng } from '$lib/types';
+
+  export let hazards: Hazard[] = [];
+  export let advisories: Advisory[] = [];
+  export let route: LatLng[] | null = null;
+  export let user: (LatLng & { accuracy?: number; stale?: boolean }) | null = null;
+  export let center: [number, number] = TACLOBAN;
+  export let zoom = 14;
+  export let showAdvisories = true;
+  export let pickMode = false;
+  export let selectedId: string | null = null;
+
+  const dispatch = createEventDispatcher<{
+    ready: void; hazardclick: string; advisoryclick: string; mapclick: LatLng;
+  }>();
+
+  let el: HTMLElement;
+  let map: L.Map | null = null;
+  let hazardLayer: L.LayerGroup; let advisoryLayer: L.LayerGroup;
+  let routeLayer: L.LayerGroup; let userLayer: L.LayerGroup;
+  let userDot: L.Marker | null = null; let userAcc: L.Circle | null = null;
+
+  onMount(() => {
+    map = L.map(el, { zoomControl: false }).setView(center, zoom);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+    advisoryLayer = L.layerGroup().addTo(map);
+    hazardLayer = L.layerGroup().addTo(map);
+    routeLayer = L.layerGroup().addTo(map);
+    userLayer = L.layerGroup().addTo(map);
+    map.on('click', (e) => { if (pickMode) dispatch('mapclick', { lat: e.latlng.lat, lng: e.latlng.lng }); });
+    dispatch('ready');
+    const ro = new ResizeObserver(() => map?.invalidateSize());
+    ro.observe(el);
+    return () => { ro.disconnect(); map?.remove(); map = null; };
+  });
+  onDestroy(() => { map?.remove(); });
+
+  function hIcon(h: Hazard, selId: string | null): L.DivIcon {
+    const trust = deriveTrust(h);
+    const sev = h.severity ?? 'one_lane';
+    const glyph = TAGS[h.hazard_type]?.icon ?? 'h-other';
+    const cls = `hz-wrap sev-${sev} t-${trust}${h.status === 'hazard_cleared' ? ' cleared' : ''}${h.id === selId ? ' sel' : ''}`;
+    const html =
+      `<div class="${cls}">` +
+      (trust === 'queued' ? `<i class="qb">${glyphSvg('clock', 'currentColor', 9)}</i>` : '') +
+2. src/lib/data/hazards.ts
+Baked in: liveHazards derived store (public surfaces) + full-status hazards (consoles) · refreshHazards() for post-mutation snappiness · advisories read from the agency_advisories_geo view (GeoJSON) · dead routeTo stub removed.
+
+ts
+
+import { writable, derived } from 'svelte/store';
+import type { RealtimeChannel } from '@supabase/supabase-js';
+import { supabase } from '$lib/supabaseClient';
+import type { Hazard, Advisory, Severity } from '$lib/types';
+
+/** ALL hazards incl. expired — for admin/agency consoles. */
+export const hazards = writable<Hazard[]>([]);
+/** Public-facing view: no expired hazards. Use this on map home, review, route. */
+export const liveHazards = derived(hazards, ($h) => $h.filter((h) => h.status !== 'expired'));
+export const advisories = writable<Advisory[]>([]);
+
+let channel: RealtimeChannel | null = null;
+let inited = false;
+
+async function reloadAdvisories() {
+  // agency_advisories_geo = SQL delta 003 view returning ST_AsGeoJSON geometry (RLS-aware)
+  const { data } = await supabase.from('agency_advisories_geo').select('*').eq('is_active', true);
+  advisories.set((data as unknown as Advisory[]) ?? []);
+}
+
+export async function refreshHazards() {
+  const { data } = await supabase.from('hazards').select('*').order('created_at', { ascending: false });
+  hazards.set((data as Hazard[]) ?? []);
+}
+
+export async function initHazards() {
+  if (inited) return;
+  inited = true;
+  await Promise.all([refreshHazards(), reloadAdvisories()]);
+  channel = supabase.channel('hazards-realtime')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'hazards' }, refreshHazards)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'agency_advisories' }, reloadAdvisories)
+    .subscribe();
+}
+
+export function stopHazards() {
+  channel?.unsubscribe();
+  channel = null;
+  inited = false;
+}
+
+export async function createHazard(p: {
+  hazard_type: string; severity: Severity; description: string | null;
+  location: string; lifetime_minutes?: number;
+}, photoUrl?: string | null) {
+  const { data, error } = await supabase.from('hazards')
+    .insert({ ...p, photo_url: photoUrl ?? null, status: 'unconfirmed' }).select().single();
+  if (error) throw error;
+  return data as Hazard;
+}
+
+export async function uploadHazardPhoto(file: File): Promise<string | null> {
+  const name = `hazard-photos/${crypto.randomUUID()}.jpg`;
+  const { error } = await supabase.storage.from('hazard-photos').upload(name, file, { contentType: 'image/jpeg' });
+  if (error) return null;
+  return supabase.storage.from('hazard-photos').getPublicUrl(name).data.publicUrl;
+}
+
+/** Community confirmation: logs + adjusts lifetime (+30 active / −15 cleared) via SQL delta 002. */
+export async function confirmHazard(hazardId: string, kind: 'hazard_active' | 'hazard_cleared') {
+  const { error } = await supabase.from('hazard_confirmations').insert({ hazard_id: hazardId, confirmation_type: kind });
+  if (error) throw error;
+  await supabase.rpc('adjust_hazard_lifetime', { p_hazard_id: hazardId, p_kind: kind });
+}
+
+export interface HazardComment { id: string; comment: string; created_at: string; user_id: string | null }
+
+export async function loadComments(hazardId: string): Promise<HazardComment[]> {
+  const { data } = await supabase.from('hazard_comments').select('*').eq('hazard_id', hazardId).order('created_at');
+  return (data as HazardComment[]) ?? [];
+}
+
+export async function addComment(hazardId: string, comment: string) {
+  const { error } = await supabase.from('hazard_comments').insert({ hazard_id: hazardId, comment });
+  if (error) throw error;
+}
+
+export async function flagHazard(hazardId: string, reason: string) {
+  await supabase.from('hazard_flags').insert({ hazard_id: hazardId, reason });
+}
+3. src/lib/components/primitives/Switch.svelte
+Baked in: change event dispatch (fixes the advisories-list + Command Center toggles).
+
+svelte
+
+<script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+  export let checked = false;
+  export let label = '';
+  const dispatch = createEventDispatcher<{ change: boolean }>();
+</script>
+<button type="button" role="switch" aria-checked={checked} aria-label={label}
+  class="sw" class:on={checked}
+  on:click={() => { checked = !checked; dispatch('change', checked); }}>
+  <span class="knob" />
+</button>
+<style>
+  .sw { width:40px; height:23px; border-radius:999px; background:var(--neutral-sf); border:none;
+    position:relative; cursor:pointer; transition:background .2s; flex:none; }
+  .sw.on { background:var(--primary); }
+  .knob { position:absolute; top:2.5px; left:3px; width:18px; height:18px; border-radius:50%;
+    background:#fff; box-shadow:var(--e1); transition:transform .2s var(--ease); }
+  .sw.on .knob { transform:translateX(16px); }
+</style>
+4. src/routes/+layout.svelte
+Baked in: PWA additions — storage persist, theme-color sync, <InstallPrompt />, <UpdatePrompt />.
+
+svelte
+
+<script lang="ts">
+  import '$lib/styles/tokens.css';
+  import '$lib/styles/base.css';
+  import '$lib/styles/map.css';
+  import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
+  import AppShell from '$lib/components/core/AppShell.svelte';
+  import Toasts from '$lib/components/primitives/Toasts.svelte';
+  import ConfirmHost from '$lib/components/primitives/ConfirmHost.svelte';
+  import InstallPrompt from '$lib/components/primitives/InstallPrompt.svelte';
+  import UpdatePrompt from '$lib/components/primitives/UpdatePrompt.svelte';
+  import { initAuth } from '$lib/authStore';
+  import { startGeo } from '$lib/stores/geo';
+  import { online } from '$lib/stores/online';
+  import { theme } from '$lib/stores/theme';
+  import { flushQueue } from '$lib/data/queue';
+
+  onMount(() => {
+    initAuth(); // inside its onAuthStateChange, also call loadProfile() from $lib/stores/profile
+    startGeo();
+    navigator.storage?.persist?.().catch(() => {}); // protect tile cache + offline queue from eviction
+  });
+
+  // flush queued offline reports whenever connectivity changes (and on open while online)
+  $: if ($online) flushQueue();
+
+  // PWA status bar follows the manual theme toggle
+  $: if (browser) {
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', $theme === 'dark' ? '#0E1116' : '#F7F8FA');
+  }
+</script>
+
+<AppShell><slot /></AppShell>
+<Toasts />
+<InstallPrompt />
+<UpdatePrompt />
+<ConfirmHost />
+5. src/routes/agency/+layout.svelte
+Baked in: 4-tab nav including Command Center; role guard; review badge.
+
+svelte
+
+<script lang="ts">
+  import { goto } from '$app/navigation';
+  import { get } from 'svelte/store';
+  import ConsoleShell from '$lib/components/core/ConsoleShell.svelte';
+  import Button from '$lib/components/primitives/Button.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import { user } from '$lib/authStore';
+  import { profile, loadProfile, reviewCount } from '$lib/stores/profile';
+  import { initHazards, hazards } from '$lib/data/hazards';
+
+  let ready = false;
+  $: init($user);
+  async function init(u: any) {
+    if (!u) return goto('/login');
+    await loadProfile();
+    const p = get(profile);
+    if (!p || (p.role !== 'agency_personnel' && p.role !== 'admin')) return goto('/');
+    initHazards();
+    ready = true;
+  }
+  $: reviewCount.set($hazards.filter((h) => h.status === 'needs_verification').length);
+</script>
+
+{#if ready}
+  <ConsoleShell title="Agency Console" subtitle="RouteGuard · Tacloban LGU"
+    items={[
+      { href: '/agency', icon: 'gauge', label: 'Overview', exact: true },
+      { href: '/agency/command', icon: 'layers', label: 'Command Center' },
+      { href: '/agency/review', icon: 'warn', label: 'Hazard Review', badge: $reviewCount },
+      { href: '/agency/advisories', icon: 'flag', label: 'Advisories' },
+    ]}>
+    <div slot="foot" class="foot">
+      <a class="maplink" href="/"><Icon name="map" size={15} /> Open public map</a>
+      <div class="who">
+        <span class="av">{($profile?.full_name ?? 'A').slice(0, 2).toUpperCase()}</span>
+        <div><b>{$profile?.full_name ?? 'Agency user'}</b><span>Agency personnel</span></div>
+      </div>
+      <Button variant="ghost" size="sm" on:click={() => goto('/login')}>Switch account</Button>
+    </div>
+    <slot />
+  </ConsoleShell>
+{/if}
+
+<style>
+  .foot { display:flex; flex-direction:column; gap:10px; }
+  .maplink { display:flex; gap:7px; align-items:center; font-size:12.5px; font-weight:700; color:var(--primary); }
+  .who { display:flex; gap:10px; align-items:center; }
+  .who b { font-size:13px; display:block; } .who span { font-size:11px; color:var(--ink2); }
+  .av { width:36px; height:36px; border-radius:50%; background:var(--primary); color:#fff;
+    display:grid; place-items:center; font-weight:800; font-size:13px; flex:none; }
+</style>
+6. src/routes/agency/review/+page.svelte
+Baked in: ?h= deep-link preselect · liveHazards · cleaner map fly-to (fires on selection change + map ready) · refreshHazards() after confirm.
+
+svelte
+
+<script lang="ts">
+  import MapCanvas from '$lib/components/core/MapCanvas.svelte';
+  import Chip from '$lib/components/primitives/Chip.svelte';
+  import Button from '$lib/components/primitives/Button.svelte';
+  import EmptyState from '$lib/components/primitives/EmptyState.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import { page } from '$app/stores';
+  import { liveHazards, refreshHazards } from '$lib/data/hazards';
+  import { officialConfirm } from '$lib/data/advisories';
+  import { TAGS, SEVERITIES, STATUS_LABEL, TACLOBAN, toLatLng } from '$lib/constants';
+  import { toast } from '$lib/stores/toast';
+  import type { Hazard } from '$lib/types';
+
+  type Filter = 'needs_verification' | 'unconfirmed' | 'all';
+  let filter: Filter = 'needs_verification';
+  let selectedId: string | null = null;
+  let busy = false;
+  let mapRef: MapCanvas;
+
+  /* Deep link from Command Center: /agency/review?h=<hazard id> */
+  $: { const qh = $page.url.searchParams.get('h'); if (qh && qh !== selectedId) selectedId = qh; }
+
+  $: list = $liveHazards.filter((h) => (filter === 'all' ? true : h.status === filter));
+  $: selected = (selectedId && $liveHazards.find((h) => h.id === selectedId)) ?? list[0] ?? null;
+
+  function flyToSel() {
+    const ll = selected && toLatLng(selected.location);
+    if (ll && mapRef) mapRef.flyTo(ll.lat, ll.lng, 16);
+  }
+  $: if (selected) flyToSel();
+
+  async function confirm(kind: 'hazard_active' | 'hazard_cleared') {
+    if (!selected || busy) return;
+    busy = true;
+    try {
+      await officialConfirm(selected.id, kind);
+      toast(kind === 'hazard_active'
+        ? 'Officially confirmed ACTIVE — public map updated'
+        : 'Officially confirmed CLEARED — public map updated', 'g');
+      await refreshHazards(); // realtime also refreshes; this keeps the queue snappy
+    } catch (e: any) { toast(e?.message ?? 'Confirmation failed', 'r'); }
+    finally { busy = false; }
+  }
+</script>
+
+<div class="review">
+  <aside class="card">
+    <div class="filters">
+      {#each [['needs_verification', 'Needs verification'], ['unconfirmed', 'Unconfirmed'], ['all', 'All open']] as [f, l]}
+        <button class:on={filter === f} on:click={() => (filter = f as Filter)}>{l}</button>
+      {/each}
+    </div>
+    <div class="list">
+      {#each list as h (h.id)}
+        <button class="item" class:on={selected?.id === h.id} on:click={() => (selectedId = h.id)}>
+          <span class="ic">{TAGS[h.hazard_type]?.label?.[0] ?? '?'}</span>
+          <span class="mid"><b>{TAGS[h.hazard_type]?.label ?? 'Hazard'}</b>
+            <small>{new Date(h.created_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+              {#if h.severity} · {SEVERITIES[h.severity].label}{/if}</small></span>
+          <Chip variant={h.status === 'needs_verification' ? 'warning' : 'neutral'}>{STATUS_LABEL[h.status]}</Chip>
+        </button>
+      {:else}<EmptyState icon="shield-check">Queue is clear.</EmptyState>{/each}
+    </div>
+  </aside>
+
+  <section class="detail">
+    {#if selected}
+      <div class="mapbox card">
+        <MapCanvas bind:this={mapRef} hazards={[selected]} advisories={[]} user={null}
+          center={TACLOBAN} zoom={15} selectedId={selected.id} on:ready={flyToSel} />
+      </div>
+      <div class="info card">
+        <div class="chips">
+          <Chip variant="brand">{TAGS[selected.hazard_type]?.label}</Chip>
+          {#if selected.severity}<Chip variant={selected.severity === 'impassable' ? 'danger' : 'warning'}>{SEVERITIES[selected.severity].label}</Chip>{/if}
+          <Chip>{STATUS_LABEL[selected.status]}</Chip>
+          {#if selected.verified_by}<Chip variant="advisory">LGU verified</Chip>{/if}
+          <span class="hint tnum" style="margin-left:auto">{selected.confirmations_count ?? 0} confirmations</span>
+        </div>
+7. src/routes/+page.svelte (Map home)
+Baked in: liveHazards · selection ring on the open pin · dismissed verification cards stay dismissed across realtime updates · sheet auto-closes if the hazard expires.
+
+svelte
+
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import MapCanvas from '$lib/components/core/MapCanvas.svelte';
+  import FloatingSearch from '$lib/components/features/FloatingSearch.svelte';
+  import LayersPopover from '$lib/components/features/LayersPopover.svelte';
+  import HazardSheet from '$lib/components/features/HazardSheet.svelte';
+  import VerificationCard from '$lib/components/features/VerificationCard.svelte';
+  import Legend from '$lib/components/primitives/Legend.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import { initHazards, liveHazards, advisories, confirmHazard, refreshHazards } from '$lib/data/hazards';
+  import { geo } from '$lib/stores/geo';
+  import { toast } from '$lib/stores/toast';
+  import { haversine, toLatLng } from '$lib/constants';
+
+  let mapRef: MapCanvas;
+  let showAdv = true;
+  let layersOpen = false;
+  let selectedId: string | null = null;
+  let dismissedVer = new Set<string>();
+
+  onMount(() => { initHazards(); });
+
+  /* sheet target derives from the store — auto-updates on confirm, auto-closes on expiry */
+  $: selected = selectedId ? ($liveHazards.find((h) => h.id === selectedId) ?? null) : null;
+
+  /* nearest needs_verification hazard within alert radius, not dismissed */
+  $: verifiable = $geo.lat != null
+    ? ($liveHazards.find((h) => h.status === 'needs_verification'
+        && !dismissedVer.has(h.id)
+        && haversine({ lat: $geo.lat!, lng: $geo.lng! }, toLatLng(h.location)!) < 500) ?? null)
+    : null;
+  $: verifyDist = verifiable && $geo.lat != null
+    ? Math.round(haversine({ lat: $geo.lat!, lng: $geo.lng! }, toLatLng(verifiable.location)!)) + ' m' : '';
+
+  function dismissVerify() {
+    if (!verifiable) return;
+    dismissedVer = new Set([...dismissedVer, verifiable.id]); // reassign so reactivity fires
+  }
+
+  async function onVerify(e: CustomEvent<'hazard_active' | 'hazard_cleared'>) {
+    if (!verifiable) return;
+    try {
+      await confirmHazard(verifiable.id, e.detail);
+      toast(e.detail === 'hazard_active' ? 'Confirmed active — thanks!' : 'Confirmed cleared — thanks!', 'g');
+      dismissVerify();
+      refreshHazards();
+    } catch { toast('Confirmation failed — check connection', 'r'); }
+  }
+</script>
+
+<div class="map-page">
+  <MapCanvas bind:this={mapRef} hazards={$liveHazards} advisories={$advisories}
+    showAdvisories={showAdv} selectedId={selectedId}
+    user={$geo.lat != null ? { lat: $geo.lat, lng: $geo.lng!, accuracy: $geo.accuracy } : null}
+    on:hazardclick={(e) => (selectedId = e.detail)} />
+
+  <FloatingSearch />
+  <div class="mbtns">
+    <button aria-label="Layers" on:click={() => (layersOpen = !layersOpen)}><Icon name="layers" size={21} /></button>
+    <button aria-label="My location" on:click={() => $geo.lat != null && mapRef.flyTo($geo.lat, $geo.lng!, 16)}>
+      <Icon name="locate" size={21} />
+    </button>
+  </div>
+  <LayersPopover bind:open={layersOpen} bind:showAdvisories />
+  <Legend />
+
+  {#if verifiable && !selected}
+    <VerificationCard hazard={verifiable} distance={verifyDist} on:confirm={onVerify} on:dismiss={dismissVerify} />
+Required companion append — src/lib/styles/map.css
+The selection pulse lives here (global, because Leaflet DOM sits outside Svelte scoping). Make sure this block is at the end of map.css:
+
+css
+
+.hz-wrap.sel::after{content:"";position:absolute;inset:-7px;border-radius:50%;
+  border:3px solid var(--primary);animation:hz-sel 1.5s var(--ease) infinite}
+@keyframes hz-sel{0%{transform:scale(.8);opacity:.9}100%{transform:scale(1.3);opacity:0}}
+Three integration notes
+SQL order matters: this code expects all three deltas applied — 002_ui_delta (severity, confirm trigger, adjust_hazard_lifetime), 003_advisory_geo (radius column, agency_advisories_geo view, create_advisory, official_confirm), 004_admin. The advisories store now reads the _geo view, so the public map breaks without 003.
+refreshHazards() is new and exported — Command Center and admin can also call it after mutations; realtime remains the primary refresh path.
+agencies/+page.svelte (Overview) still references $hazards — harmless (it counts non-expired manually), but swap to $liveHazards at your leisure per patch note #5.
+That's the full consolidated set. Remaining from the old checklist if you want them emitted clean next: AppShell.svelte (agency FAB menu variant) and the login role-redirect handler — say the word.
+

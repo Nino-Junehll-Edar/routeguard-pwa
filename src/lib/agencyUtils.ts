@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient';
 import { user } from './authStore';
+import { get } from 'svelte/store';
 
 export interface AgencyRequestForm {
   full_name: string;
@@ -28,7 +29,7 @@ export interface AgencyRequest {
  * Submit an agency request
  */
 export async function submitAgencyRequest(formData: AgencyRequestForm): Promise<{ success: boolean; error?: string }> {
-  const currentUser = user.get();
+  const currentUser = get(user);
   if (!currentUser) {
     return { success: false, error: 'User not authenticated' };
   }

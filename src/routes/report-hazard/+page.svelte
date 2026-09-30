@@ -4,7 +4,7 @@
   import { user } from '$lib/authStore';
   import { uploadHazardPhoto, deleteHazardPhoto } from '$lib/storageUtils';
   import type { HazardReportForm } from '$lib/types/hazardReport';
-  import { writable } from 'svelte/store';
+  import { writable, get } from 'svelte/store';
 
   // Geolocation state machine
   const GEOLOCATION_STATUS = {
@@ -15,7 +15,7 @@
     ERROR: 'error'
   } as const;
 
-  let geoStatus = writable<keyof typeof GEOLOCATION_STATUS>(GEOLOCATION_STATUS.REQUESTING);
+  let geoStatus = writable<typeof GEOLOCATION_STATUS[keyof typeof GEOLOCATION_STATUS]>(GEOLOCATION_STATUS.REQUESTING);
   let latitude: number | null = null;
   let longitude: number | null = null;
   let geoError: string | null = null;
@@ -72,7 +72,7 @@
     );
   });
 
-  function updateGeolocationStatus(status: keyof typeof GEOLOCATION_STATUS) {
+  function updateGeolocationStatus(status: typeof GEOLOCATION_STATUS[keyof typeof GEOLOCATION_STATUS]) {
     geoStatus.set(status);
   }
 
@@ -171,7 +171,7 @@
 
     try {
       // Get current user
-      const currentUser = user.get();
+      const currentUser = get(user);
       if (!currentUser) {
         throw new Error('User not authenticated');
       }
@@ -276,7 +276,7 @@
       <p>{#if $geoStatus === 'requesting'}
         Getting your location...
       {:else if $geoStatus === 'located'}
-        Your location: Lat: {$latitude?.toFixed(6) || '0.000000'}, Lng: {$longitude?.toFixed(6) || '0.000000'}
+                Your location: Lat: {latitude?.toFixed(6) || '0.000000'}, Lng: {longitude?.toFixed(6) || '0.000000'}
       {:else if $geoStatus === 'denied'}
         Location permission denied.
         <button on:click={retryGeolocation} class="btn-link">Try again</button> or
@@ -285,7 +285,7 @@
         Geolocation is not supported by your browser.
         <button on:click={() => manualLocationEnabled = true} class="btn-link">Enter location manually</button>
       {:else if $geoStatus === 'error'}
-        {$geoError}
+                {geoError}
         <button on:click={retryGeolocation} class="btn-link">Try again</button>
       {/if}</p>
     </div>

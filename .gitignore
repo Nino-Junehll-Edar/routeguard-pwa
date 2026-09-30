@@ -1,26 +1,27 @@
-# .gitignore for RouteGuard Svelte PWA
-.node_modules/
-.claude/
-.worktrees/
+﻿# .gitignore for RouteGuard PWA
+node_modules
+.svelte-kit
+
 # Logs
 *.log
-# OS-generated files
+
+# Environment
+.env
+
+# OS files
 .DS_Store
 Thumbs.db
 
-node_modules
+# Supabase local dev (optional - uncomment if using local supabase)
+# supabase/.gitignore
 
-.env
+# Build output
+dist
 
-supabase/
+# IDE
+.vscode
+.idea
 
-.svelte-kit
-
-z.ai design stuff
-
-*.txt
+# Temporary files
+*.tmp
 *.pid
-docs
-tests
-
-.worktrees/

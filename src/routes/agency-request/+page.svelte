@@ -23,8 +23,8 @@
 
   // Check authentication and redirect if needed
   async function checkAuth() {
-    const currentUser = user.get();
-    const profileData = profile.get();
+    const currentUser = get(user);
+    const profileData = get(profile);
 
     if (!currentUser) {
       // Not signed in, redirect to login
@@ -33,9 +33,12 @@
       return;
     }
 
-    // Load profile if not already loaded
+    // Wait for profile to load if needed
     if (!profileData) {
       // Profile will be loaded via authStore listener
+      // For now, we'll assume the user doesn't have agency access until profile loads
+      isLoading = false;
+      return;
     }
 
     // Check if user is already agency personnel or admin

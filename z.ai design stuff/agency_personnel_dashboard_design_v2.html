@@ -1,0 +1,742 @@
+<!doctype html><html lang="en" data-theme="light"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RouteGuard — Agency Console Prototype v0.2</title>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#F7F8FA;--surface:#FFFFFF;--raised:#FFFFFF;--border:#DDE3EA;--ink:#12161A;--ink2:#4A545E;
+--primary:#1B5CA8;--primary-ink:#0F3460;--primary-surface:#E7F0FA;--danger:#C4271E;--danger-sf:#FBE9E7;
+--warning:#B45309;--warning-sf:#FCF0DD;--caution:#F0A400;--neutral:#64748B;--neutral-sf:#EEF1F5;
+--success:#2E8555;--success-sf:#E4F3EB;--advisory:#6D28D9;--advisory-sf:#F1EAFB;--gold:#B7791F;
+--map-land:#EDF1F6;--map-water:#C9E0F4;--map-road:#FFFFFF;--map-minor:#F2F5F9;--map-pk:#DDEAD9;--map-lbl:#5B6B7B;
+--r-s:8px;--r-m:12px;--r-l:16px;--e1:0 1px 2px rgba(10,20,30,.12);--e2:0 4px 14px rgba(10,20,30,.16);--e3:0 12px 32px rgba(10,20,30,.22);
+--ease:cubic-bezier(.32,.72,.24,1);--f:'Public Sans',system-ui,-apple-system,sans-serif}
+[data-theme=dark]{--bg:#0E1116;--surface:#161B22;--raised:#1C2430;--border:#2A3340;--ink:#E6EAF0;--ink2:#9AA7B4;
+--primary:#5E93D6;--primary-ink:#C5D9F2;--primary-surface:#12283F;--danger:#FF6B4A;--danger-sf:#2E1512;
+--warning:#FFC24B;--warning-sf:#2A1F0E;--caution:#E0B341;--neutral:#94A3B8;--neutral-sf:#1D242E;
+--success:#4AC97E;--success-sf:#12271B;--advisory:#A78BFA;--advisory-sf:#1D1533;--gold:#E9B44C;
+--map-land:#12171E;--map-water:#0E2438;--map-road:#39434F;--map-minor:#1D242E;--map-pk:#17251B;--map-lbl:#7C8A99}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--f);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+input,select,textarea{font:inherit;color:var(--ink)}
+svg.ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+#errbox{display:none;position:fixed;bottom:8px;left:8px;right:8px;z-index:9999;background:#7A2A20;color:#fff;font:12px/1.5 ui-monospace,monospace;padding:10px 12px;border-radius:8px;max-height:40vh;overflow:auto}
+/* proto bar */
+#proto{position:sticky;top:0;z-index:1000;display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 16px;background:#101418;color:#E6EAF0;border-bottom:1px solid #232a33;font-size:13px}
+#proto .lg{font-weight:800;display:flex;gap:8px;align-items:center;margin-right:auto}
+#proto .lg svg{width:18px;height:18px;stroke:#5E93D6}
+#proto .lg span{color:#6b7684;font-weight:600}
+.pbtn{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid #333d49;border-radius:8px;color:#9AA7B4;font-weight:600;font-size:12.5px}
+.pbtn.on{background:#152a18;border-color:#2E8555;color:#7EE2A8}
+/* console layout */
+.console{display:grid;grid-template-columns:236px 1fr;min-height:calc(100vh - 53px)}
+.side{background:var(--surface);border-right:1px solid var(--border);padding:18px 12px;display:flex;flex-direction:column;gap:2px;position:sticky;top:53px;height:calc(100vh - 53px)}
+.logo{display:flex;gap:9px;align-items:center;padding:4px 10px 18px;font-weight:800;font-size:15.5px}
+.logo svg{color:var(--primary)}
+.logo small{display:block;font-size:10.5px;color:var(--ink2);font-weight:600}
+.anav{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:var(--r-s);font-size:13.5px;font-weight:600;color:var(--ink2);width:100%;text-align:left}
+.anav:hover{background:var(--neutral-sf)}
+.anav.on{background:var(--primary-surface);color:var(--primary)}
+.anav .n{margin-left:auto;background:var(--danger);color:#fff;font-size:10.5px;border-radius:99px;padding:1px 7px}
+.foot{margin-top:auto;border-top:1px solid var(--border);padding-top:12px;display:flex;flex-direction:column;gap:10px}
+.lnk{display:flex;gap:7px;align-items:center;font-size:12.5px;font-weight:700;color:var(--primary);text-align:left}
+.who{display:flex;gap:10px;align-items:center}
+.who b{font-size:13px;display:block}.who span{font-size:11px;color:var(--ink2)}
+.av{width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px;flex:none}
+/* shared bits */
+.sec{display:none}.sec.on{display:block}
+.wrap{padding:24px 32px 60px;max-width:1150px}
+h1{font-size:21px;font-weight:800}
+h3{font-size:14.5px}
+.sub{color:var(--ink2);font-size:13px}.hint{font-size:12px;color:var(--ink2)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-l)}
+.pad{padding:18px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;border-radius:var(--r-m);background:var(--primary);color:#fff;font-weight:700;font-size:14px;transition:transform .12s var(--ease)}
+[data-theme=dark] .btn{color:#0B1420}
+.btn:active{transform:scale(.98)}.btn:disabled{opacity:.5;cursor:default}
+.btn.b2{background:var(--surface);color:var(--primary);border:1.5px solid var(--border)}
+.btn.g{background:transparent;color:var(--ink2)}
+.btn.adv{background:var(--advisory);color:#fff}
+.btn.sm{min-height:34px;padding:0 13px;font-size:12.5px}
+.blk{width:100%}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;background:var(--neutral-sf);color:var(--ink2);white-space:nowrap}
+.chip.p{background:var(--primary-surface);color:var(--primary)}
+.chip.r{background:var(--danger-sf);color:var(--danger)}
+.chip.a{background:var(--warning-sf);color:var(--warning)}
+.chip.c{background:var(--warning-sf);color:var(--caution)}
+.chip.gn{background:var(--success-sf);color:var(--success)}
+.chip.v{background:var(--advisory-sf);color:var(--advisory)}
+.in{min-height:42px;padding:0 12px;border:1.5px solid var(--border);border-radius:var(--r-m);background:var(--surface);font-size:13.5px}
+textarea.in{padding:10px 12px;min-height:70px;resize:vertical;width:100%}
+.in:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-surface)}
+.seg{display:flex;background:var(--neutral-sf);border-radius:9px;padding:3px}
+.seg button{padding:6px 12px;border-radius:7px;font-size:12px;font-weight:700;color:var(--ink2)}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:var(--e1)}
+.sw{width:36px;height:21px;border-radius:99px;background:var(--neutral-sf);position:relative;transition:background .2s;flex:none;display:inline-block;cursor:pointer}
+.sw::after{content:"";position:absolute;top:2.5px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:var(--e1);transition:transform .2s var(--ease)}
+.sw.on{background:var(--primary)}.sw.on::after{transform:translateX(14px)}
+.stat{padding:16px;display:flex;flex-direction:column;gap:2px}
+.stat span{font-size:11.5px;color:var(--ink2);font-weight:600}.stat b{font-size:25px;font-weight:800}
+.stat i{font-style:normal;font-size:11px;font-weight:700}.i-g{color:var(--success)}.i-r{color:var(--danger)}
+.kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:8px 0;border-bottom:1px solid var(--border);align-items:center}
+.kv span{color:var(--ink2)}.kv b{font-weight:700;text-align:right}
+/* map */
+.mapbox{position:absolute;inset:0;overflow:hidden;background:var(--map-land)}
+.mzoom{position:absolute;inset:0;transition:transform .5s var(--ease)}
+.mzoom.on{transform:scale(1.9)}
+.base,.ovl{position:absolute;inset:0;width:100%;height:100%}
+.base{pointer-events:none}
+.l{fill:var(--map-land)}.w{fill:var(--map-water)}.wv{fill:none;stroke:var(--map-water);stroke-width:16;stroke-linecap:round}
+.pk{fill:var(--map-pk)}
+.rd{stroke:var(--map-minor);stroke-width:5;fill:none}.rdm{stroke:var(--map-road);stroke-width:9;fill:none}
+.lb{fill:var(--map-lbl);font:600 11px var(--f);letter-spacing:.4px}
+.lb.big{font:800 17px var(--f)}.lb.wt{fill:#5B84B0;font-style:italic}
+.advL{stroke:var(--advisory);stroke-width:8;fill:none;stroke-linecap:round}
+.advL.roadwork{stroke-dasharray:14 10}
+.advZ{fill:var(--advisory-sf);stroke:var(--advisory);stroke-width:2.5}
+.advC{fill:var(--advisory);fill-opacity:.14;stroke:var(--advisory);stroke-width:2.5}
+.advDot{fill:var(--advisory);stroke:var(--surface);stroke-width:2.5}
+.advT{font:800 12px var(--f);fill:var(--advisory);letter-spacing:.4px;paint-order:stroke;stroke:var(--bg);stroke-width:4px;pointer-events:none}
+.hit{stroke:rgba(0,0,0,0);stroke-width:22;fill:none}
+.advG{cursor:pointer}
+.hpin{cursor:pointer}
+.hpin use{pointer-events:none}
+.hpin .selring{display:none;fill:none;stroke:var(--primary);stroke-width:3;transform-box:fill-box;transform-origin:center}
+.hpin.sel .selring{display:block;animation:selp 1.5s var(--ease) infinite}
+@keyframes selp{0%{transform:scale(.85);opacity:.9}100%{transform:scale(1.5);opacity:0}}
+.hpin.cleared{opacity:.55}
+/* overview */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0}
+.g2{display:grid;grid-template-columns:1.4fr 1fr;gap:16px}
+.g2 h3{margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.row:last-of-type{border:none}
+.row .ai{flex:1;min-width:0}.row .ai b{font-size:13.5px}
+.more{font-size:13px;font-weight:700;color:var(--primary);padding:0;margin-top:8px}
+header.hd{display:flex;align-items:flex-start;gap:16px;margin-bottom:16px}
+header.hd>div{flex:1}
+.livedot{width:8px;height:8px;border-radius:99px;background:var(--success);display:inline-block;animation:pl 1.6s infinite}
+@keyframes pl{50%{opacity:.3}}
+/* command center */
+#sec-command{height:calc(100vh - 53px)}
+.cc{position:relative;height:100%}
+.topbar{position:absolute;top:12px;left:12px;right:12px;z-index:20;display:flex;flex-direction:column;gap:8px;background:var(--raised);border:1px solid var(--border);border-radius:var(--r-l);box-shadow:var(--e2);padding:10px 14px}
+.trow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.live{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:800;letter-spacing:.5px;color:var(--success)}
+.live .dot{width:8px;height:8px;border-radius:99px;background:var(--success);animation:pl 1.6s infinite}
+.st{font-size:12px;color:var(--ink2)}.st b{color:var(--ink);font-size:14px;margin-right:3px}
+.schip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1.5px solid var(--border);background:var(--surface);font-size:11.5px;font-weight:700;color:var(--ink2);flex:none}
+.schip i{width:8px;height:8px;border-radius:99px;background:var(--dot);opacity:.3}
+.schip.on{border-color:var(--dot);color:var(--ink)}.schip.on i{opacity:1}
+.swl{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700}
+.panel{position:absolute;top:152px;right:12px;bottom:12px;width:344px;z-index:20;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+.ph{display:flex;flex-direction:column;gap:9px;align-items:flex-start}
+.ph ul{padding-left:16px;line-height:1.9}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.cphoto{height:130px;border-radius:var(--r-m);background:linear-gradient(135deg,var(--primary-surface),var(--neutral-sf));display:flex;flex-direction:column;gap:5px;align-items:center;justify-content:center;color:var(--ink2);font-size:12px;font-weight:600}
+.cphoto svg{width:24px;height:24px}
+.desc{font-size:13px}
+.acts{display:flex;gap:8px}.acts .btn{flex:1;min-height:40px;font-size:12.5px}
+.links{display:flex;gap:14px;flex-wrap:wrap}
+/* review */
+.rv{display:grid;grid-template-columns:380px 1fr;gap:16px;padding:20px 32px;height:calc(100vh - 53px)}
+.rlist{display:flex;flex-direction:column;overflow:hidden}
+.ftabs{display:flex;gap:6px;padding:12px;border-bottom:1px solid var(--border)}
+.ftabs button{flex:1;padding:7px 6px;border-radius:var(--r-s);border:1.5px solid var(--border);background:var(--surface);font-size:11.5px;font-weight:700;color:var(--ink2)}
+.ftabs button.on{border-color:var(--primary);color:var(--primary);background:var(--primary-surface)}
+.ritems{overflow-y:auto;flex:1}
+.ritem{display:flex;gap:10px;align-items:center;width:100%;padding:12px 14px;text-align:left;border-bottom:1px solid var(--border)}
+.ritem.on{background:var(--primary-surface)}
+.ritem .dot{width:12px;height:12px;border-radius:99px;flex:none;border:2px solid var(--surface);box-shadow:var(--e1)}
+.ritem .mid{flex:1;min-width:0}.ritem b{font-size:13.5px;display:block}.ritem small{color:var(--ink2);font-size:11.5px}
+.rdetail{display:flex;flex-direction:column;gap:14px;min-width:0}
+.rmapbox{position:relative;flex:1;min-height:220px;overflow:hidden}
+.rinfo{padding:16px;display:flex;flex-direction:column;gap:10px}
+.rinfo .acts .btn{flex:1}
+/* advisories list */
+.arow{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid var(--border)}
+.arow:last-child{border:none}
+/* builder */
+.bld{display:grid;grid-template-columns:400px 1fr;gap:16px;padding:20px 32px;height:calc(100vh - 53px)}
+.bform{padding:18px;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+.bform label.fl{display:block;font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:5px}
+.bform .fld{margin-bottom:2px}
+.modes{display:flex;gap:6px}
+.modes button{flex:1;padding:9px 6px;border-radius:var(--r-s);border:1.5px solid var(--border);background:var(--surface);font-size:12px;font-weight:700;color:var(--ink2)}
+.modes button.on{border-color:var(--advisory);color:var(--advisory);background:var(--advisory-sf)}
+.tools{display:flex;gap:8px;align-items:center}
+.bmapwrap{position:relative;overflow:hidden;cursor:crosshair}
+.bhint{position:absolute;top:10px;left:10px;z-index:10;display:flex;gap:7px;align-items:center;background:var(--raised);border:1px solid var(--border);border-radius:999px;padding:8px 13px;font-size:12px;font-weight:700;box-shadow:var(--e1);pointer-events:none}
+.dt{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.dt .in{width:100%}
+input[type=range]{accent-color:var(--advisory);width:100%}
+/* toasts */
+#toasts{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:2000;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
+.toast{background:var(--primary-ink);color:#fff;font-size:13px;font-weight:600;padding:11px 18px;border-radius:999px;box-shadow:var(--e3);max-width:88vw;text-align:center;animation:tin .25s var(--ease)}
+.toast.g{background:var(--success)}.toast.w{background:var(--warning)}.toast.r{background:var(--danger)}
+[data-theme=dark] .toast{background:#2A3B52}
+[data-theme=dark] .toast.g{background:#1D5A38}[data-theme=dark] .toast.w{background:#6B4A0E}[data-theme=dark] .toast.r{background:#7A2A20}
+@keyframes tin{from{opacity:0;transform:translateY(10px)}}
+@media(max-width:1000px){
+ .console{grid-template-columns:1fr}
+ .side{position:sticky;top:53px;height:auto;flex-direction:row;align-items:center;overflow-x:auto;padding:8px 12px}
+ .logo{padding:4px 10px}.logo small{display:none}
+ .anav{width:auto;white-space:nowrap}.anav .lbl{display:none}
+ .foot{margin:0 0 0 auto;border:none;padding:0;flex-direction:row;align-items:center}.who div{display:none}
+ .rv,.bld{grid-template-columns:1fr;height:auto}.rmapbox{min-height:200px}.bmapwrap{height:380px}
+ .panel{left:12px;right:12px;width:auto;top:auto;bottom:12px;max-height:46vh}
+ .panel.empty{display:none}
+ .g2{grid-template-columns:1fr}
+}
+</style>
+</head><body>
+
+<svg style="position:absolute;width:0;height:0" aria-hidden="true"><defs>
+<symbol id="i-shieldc" viewBox="0 0 24 24"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3Z"/><path d="m9 11.5 2 2 4-4.5"/></symbol>
+<symbol id="i-gauge" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m12 12 4-4"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7l10-5Z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/></symbol>
+<symbol id="i-warn" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1Z"/><path d="M4 22v-7"/></symbol>
+<symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2Z"/><circle cx="12" cy="13" r="4"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+<symbol id="t-flood" viewBox="0 0 24 24"><path d="M3 10c2.2 0 2.2 1.6 4.5 1.6S9.8 10 12 10s2.2 1.6 4.5 1.6S18.8 10 21 10"/><path d="M3 15c2.2 0 2.2 1.6 4.5 1.6s2.3-1.6 4.5-1.6 2.2 1.6 4.5 1.6S18.8 15 21 15"/><path d="M3 20c2.2 0 2.2 1.6 4.5 1.6s2.3-1.6 4.5-1.6 2.2 1.6 4.5 1.6S18.8 20 21 20"/></symbol>
+<symbol id="t-pothole" viewBox="0 0 24 24"><path d="M4 15a8 4.5 0 1 0 16 0 8 4.5 0 1 0-16 0"/><path d="m11 5-1.5 3 2.5 1.5"/></symbol>
+<symbol id="t-accident" viewBox="0 0 24 24"><path d="M4 16v-3l2-4.5A2 2 0 0 1 7.8 7h8.4a2 2 0 0 1 1.8 1.5L20 13v3"/><path d="M4 13h16M7 16v2.5M17 16v2.5M2.5 16h19"/></symbol>
+<symbol id="t-obstruction" viewBox="0 0 24 24"><path d="M12 4 5 20h14L12 4Z"/><path d="M9.3 13.5h5.4M8 17h8"/></symbol>
+<symbol id="t-landslide" viewBox="0 0 24 24"><path d="M4 20h16M4 5l7 5"/><circle cx="9" cy="14" r="1.7"/><circle cx="14" cy="16.5" r="2"/><circle cx="17.5" cy="10.5" r="2.3"/></symbol>
+<symbol id="t-tree" viewBox="0 0 24 24"><path d="M12 3 7 11h3l-4 6h12l-4-6h3L12 3Z"/><path d="M12 17v4"/></symbol>
+<symbol id="t-collapse" viewBox="0 0 24 24"><path d="M8 3l3 5-4 3 5 4-3 6"/><path d="m14 4 2 3M15 12l3 2"/></symbol>
+<symbol id="t-other" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></symbol>
+<g id="citywide">
+ <rect class="l" x="0" y="0" width="1200" height="760"/>
+ <path class="w" d="M1005 0C1030 90 985 200 1015 300C1040 390 1000 480 1025 570C1045 650 1010 710 1030 760L1200 760L1200 0Z"/>
+ <path class="wv" d="M60 0C130 70 210 90 280 150C330 195 380 200 430 235"/>
+ <ellipse class="pk" cx="185" cy="600" rx="95" ry="58"/><ellipse class="pk" cx="840" cy="150" rx="75" ry="46"/>
+ <g class="rd"><path d="M200 70V720"/><path d="M340 70V720"/><path d="M620 70V720"/><path d="M900 80V700"/>
+ <path d="M90 260H980"/><path d="M90 500H980"/><path d="M90 620H960"/><path d="M90 700H960"/><path d="M240 140H940"/></g>
+ <g class="rdm"><path d="M70 200H985"/><path d="M70 320H1000"/><path d="M70 440H1000"/>
+ <path d="M480 70V720"/><path d="M760 70V720"/><path d="M80 660 340 500 620 380 820 260 980 150"/></g>
+ <text class="lb big" x="90" y="748">TACLOBAN CITY</text><text class="lb" x="688" y="120">SAGKAHAN</text>
+ <text class="lb" x="96" y="190">RIZAL AVE</text><text class="lb" x="96" y="310">QUEZON BLVD</text>
+ <text class="lb" x="96" y="430">REAL ST</text><text class="lb" x="492" y="600" transform="rotate(-90 492 600)">ROMUALDEZ ST</text>
+ <text class="lb" x="772" y="640" transform="rotate(-90 772 640)">MAIN BLVD</text>
+ <text class="lb wt" x="1125" y="430" transform="rotate(-90 1125 430)">CANCABATO BAY</text>
+ <text class="lb" x="248" y="592">BARANGAY 59</text>
+</g>
+</defs></svg>
+
+<header id="proto">
+ <div class="lg"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><use href="#i-shieldc"/></svg>RouteGuard <span>· Agency Console prototype v0.2 (LGU desktop)</span></div>
+ <button class="pbtn" id="psim">⚡ Simulate incoming report</button>
+ <button class="pbtn" id="ptheme">◐ Light</button>
+ <button class="pbtn" id="preset">↺ Reset</button>
+</header>
+
+<div class="console">
+ <aside class="side">
+  <div class="logo"><svg class="ic" style="width:24px;height:24px"><use href="#i-shieldc"/></svg><span>Agency Console<small>RouteGuard · Tacloban LGU</small></span></div>
+  <button class="anav on" data-sec="overview"><svg class="ic"><use href="#i-gauge"/></svg><span class="lbl">Overview</span></button>
+  <button class="anav" data-sec="command"><svg class="ic"><use href="#i-layers"/></svg><span class="lbl">Command Center</span></button>
+  <button class="anav" data-sec="review"><svg class="ic"><use href="#i-warn"/></svg><span class="lbl">Hazard Review</span><span class="n" id="rvBadge">0</span></button>
+  <button class="anav" data-sec="advs"><svg class="ic"><use href="#i-flag"/></svg><span class="lbl">Advisories</span></button>
+  <div class="foot">
+   <button class="lnk" id="lnkMap"><svg class="ic" style="width:15px;height:15px"><use href="#i-map"/></svg>Open public map</button>
+   <div class="who"><span class="av">KB</span><div><b>Kevin Bautista</b><span>City Gov't of Tacloban · verified</span></div></div>
+  </div>
+ </aside>
+ <main>
+
+ <section class="sec on" id="sec-overview">
+  <div class="wrap">
+   <header class="hd"><div><h1>Good day, Kevin</h1><p class="sub">Community hazards awaiting official action, and your published advisories.</p></div>
+    <span class="chip v">LGU verified account</span></header>
+   <div class="stats" id="ovStats"></div>
+   <div class="g2">
+    <section class="card pad"><h3>Latest hazards</h3><div id="ovHaz"></div><button class="more" data-goto="review">Open review queue →</button></section>
+    <section class="card pad"><h3>Advisories</h3><div id="ovAdv"></div><button class="more" data-goto="advs">Manage advisories →</button></section>
+   </div>
+  </div>
+ </section>
+
+ <section class="sec" id="sec-command">
+  <div class="cc">
+   <div class="mapbox" id="ccMapBox">
+    <div class="mzoom" id="ccZoom">
+     <svg class="base" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMid slice"><use href="#citywide"/></svg>
+     <svg class="ovl" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMid slice"><g id="ccOvl"></g></svg>
+    </div>
+   </div>
+   <div class="topbar">
+    <div class="trow">
+     <span class="live"><i class="dot"></i>LIVE · <span id="syncT">synced</span></span>
+     <span class="st"><b id="stOpen">0</b> open</span>
+     <span class="st"><b id="stNv">0</b> need verification</span>
+     <span class="st"><b id="stAdv">0</b> advisories</span>
+     <span class="st"><b id="st24">0</b> reports 24 h</span>
+     <span class="hint" style="margin-left:auto" id="stShowing"></span>
+    </div>
+    <div class="trow">
+     <div class="seg" id="wseg">
+      <button data-w="all">All time</button><button data-w="1h">1 h</button><button class="on" data-w="24h">24 h</button><button data-w="7d">7 d</button>
+     </div>
+     <select class="in" id="typeSel" style="width:auto">
+      <option value="all">All types</option><option value="flood">Flood</option><option value="pothole">Pothole</option>
+      <option value="accident">Accident</option><option value="obstruction">Obstruction</option><option value="landslide">Landslide</option>
+      <option value="tree">Fallen tree</option><option value="collapse">Road collapse</option><option value="other">Other</option>
+     </select>
+     <label class="swl">Advisories <span class="sw on" id="advSw"></span></label>
+    </div>
+    <div class="trow" id="schips" style="gap:6px;overflow-x:auto"></div>
+   </div>
+   <aside class="panel card empty" id="ccPanel"></aside>
+  </div>
+ </section>
+
+ <section class="sec" id="sec-review">
+  <div class="rv">
+   <aside class="card rlist">
+    <div class="ftabs" id="ftabs">
+     <button class="on" data-f="needs_verification">Needs verification</button>
+     <button data-f="unconfirmed">Unconfirmed</button>
+     <button data-f="all">All open</button>
+    </div>
+    <div class="ritems" id="rItems"></div>
+   </aside>
+   <section class="rdetail">
+    <div class="card rmapbox">
+     <svg class="base" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMid slice"><use href="#citywide"/></svg>
+     <svg class="ovl" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMid slice"><g id="rOvl"></g></svg>
+    </div>
+    <div class="card rinfo" id="rInfo"></div>
+   </section>
+  </div>
+ </section>
+
+ <section class="sec" id="sec-advs">
+  <div class="wrap">
+   <header class="hd"><div><h1>Advisories</h1><p class="sub">Official notices you've published. To change geometry, deactivate and publish a new one.</p></div>
+    <button class="btn" id="newAdv">＋ New advisory</button></header>
+   <div class="card pad" id="advList"></div>
+  </div>
+ </section>
+
+ <section class="sec" id="sec-builder">
+  <div class="bld">
+   <aside class="card bform">
+    <h3 style="font-size:16px">New advisory</h3>
+    <div class="fld"><label class="fl" for="bType">Type</label>
+     <select class="in" id="bType" style="width:100%"><option value="road_closure">Road closure</option><option value="roadwork" selected>Roadwork</option><option value="flood_zone">Flood-prone zone</option><option value="event">Event / traffic</option></select></div>
+    <div class="fld"><label class="fl">Draw shape</label>
+     <div class="modes" id="modeSeg">
+      <button data-mode="point">Point + radius</button><button data-mode="line" class="on">Line</button><button data-mode="area">Area</button>
+     </div></div>
+    <div class="fld" id="radWrap" style="display:none">
+     <label class="fl" for="rad">Radius: <b id="radVal">300 m</b></label>
+     <input id="rad" type="range" min="50" max="2000" step="50" value="300">
+    </div>
+    <p class="hint" id="bHint"></p>
+    <div class="tools">
+     <button class="btn b2 sm" id="bUndo">Undo</button>
+     <button class="btn b2 sm" id="bClear">Clear</button>
+     <span class="chip v" style="margin-left:auto" id="bCount">0 pts</span>
+    </div>
+    <div class="fld"><label class="fl" for="bTitle">Title</label><input class="in" id="bTitle" style="width:100%" placeholder="e.g. Real St roadwork — lane closure"></div>
+    <div class="fld"><label class="fl" for="bDesc">Description</label><textarea class="in" id="bDesc" placeholder="Details the public should know"></textarea></div>
+    <div class="fld"><label class="fl">Schedule</label>
+     <div class="modes" id="schedSeg">
+      <button data-sc="now" class="on">Now + 2 h</button><button data-sc="custom">Custom</button><button data-sc="open">Open-ended</button>
+     </div></div>
+    <div class="dt" id="customDates" style="display:none">
+     <div><label class="fl" for="bStart">Starts</label><input class="in" id="bStart" type="datetime-local"></div>
+     <div><label class="fl" for="bEnd">Ends</label><input class="in" id="bEnd" type="datetime-local"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:auto;padding-top:8px">
+     <button class="btn adv blk" id="bPublish">Publish advisory</button>
+     <button class="btn g blk" id="bCancel">Cancel</button>
+    </div>
+   </aside>
+   <div class="card bmapwrap" id="bmapwrap">
+    <svg class="base" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMid slice"><use href="#citywide"/></svg>
+    <svg class="ovl" viewBox="0 0 1200 760" preserveAspectRatio="xMidYMid slice"><g id="bOvl"></g></svg>
+    <div class="bhint" id="bHint2">Click the map to trace the affected road</div>
+   </div>
+  </div>
+ </section>
+
+ </main>
+</div>
+
+<div id="toasts"></div>
+<div id="errbox"></div>
+
+<script>
+(function(){
+'use strict';
+function showErr(m){var b=document.getElementById('errbox');if(!b)return;b.style.display='block';b.textContent='Prototype error: '+m;}
+window.addEventListener('error',function(e){showErr(e.message+(e.lineno?' (line '+e.lineno+')':''));});
+var $=function(s){return document.querySelector(s);},$$=function(s){return Array.prototype.slice.call(document.querySelectorAll(s));};
+function toast(m,k){var t=document.createElement('div');t.className='toast'+(k?' '+k:'');t.textContent=m;$('#toasts').appendChild(t);setTimeout(function(){t.remove();},3000);}
+
+/* ================= DATA ================= */
+var TAGS={flood:'Flood',pothole:'Pothole',accident:'Accident',obstruction:'Obstruction',landslide:'Landslide',tree:'Fallen tree',collapse:'Road collapse',other:'Other'};
+var SEVL={passable:'Passable',one_lane:'One lane',impassable:'Impassable'};
+var SEVC={passable:'c',one_lane:'a',impassable:'r'};
+var STL={unconfirmed:'Unconfirmed',needs_verification:'Needs verification',hazard_active:'Active',hazard_cleared:'Cleared',expired:'Expired'};
+var STC={unconfirmed:'',needs_verification:'a',hazard_active:'r',hazard_cleared:'gn',expired:''};
+var TYPE_L={road_closure:'Road closure',roadwork:'Roadwork',flood_zone:'Flood-prone zone',event:'Event / traffic'};
+var WINDOWS={all:1e9,'1h':60,'24h':1440,'7d':10080};
+var S={sec:'overview',theme:'light',win:'24h',type:'all',showAdv:true,
+ statusOn:{unconfirmed:true,needs_verification:true,hazard_active:true,hazard_cleared:true,expired:false},
+ ccSel:null,rvFilter:'needs_verification',rvSel:null,zoomed:null,
+ bType:'roadwork',bMode:'line',bPts:[],bRadius:300,bSched:'now',bStart:'',bEnd:''};
+
+var hazards=[
+ {id:'h1',sx:560,sy:320,tag:'flood',sev:'impassable',status:'needs_verification',verified:false,confirmed:1,minsAgo:35,t:'14:02',street:'Quezon Blvd',desc:'Water at knee level across both lanes near the divisoria. Two tricycles stalled.',photo:true,reporter:'Maria S.'},
+ {id:'h2',sx:430,sy:440,tag:'pothole',sev:'one_lane',status:'unconfirmed',verified:false,confirmed:0,minsAgo:160,t:'11:47',street:'Real St',desc:'Deep pothole right lane. Two motorcycles already swerved into traffic.',photo:false,reporter:'Roland C.'},
+ {id:'h3',sx:760,sy:385,tag:'accident',sev:'impassable',status:'hazard_active',verified:true,confirmed:12,minsAgo:95,t:'12:30',street:'Justice Romualdez St',desc:'Two-vehicle collision, road fully blocked. Enforcers on site.',photo:true,reporter:'LGU Tacloban'},
+ {id:'h4',sx:300,sy:262,tag:'obstruction',sev:'passable',status:'unconfirmed',verified:false,confirmed:2,minsAgo:400,t:'09:15',street:'Dela Paz St',desc:'Fallen branches on the shoulder, one lane open.',photo:false,reporter:'Bea R.'},
+ {id:'h5',sx:700,sy:205,tag:'flood',sev:'one_lane',status:'needs_verification',verified:false,confirmed:4,minsAgo:20,t:'13:55',street:'Sagkahan Rd',desc:'Rising water on the outer lane near the creek crossing.',photo:false,reporter:'Jun A.'},
+ {id:'h6',sx:900,sy:620,tag:'tree',sev:'impassable',status:'hazard_cleared',verified:false,confirmed:6,minsAgo:300,t:'08:40',street:'Anibong Rd',desc:'Fallen acacia fully blocking the lane; crew on site.',photo:true,reporter:'Ana L.'},
+ {id:'h7',sx:240,sy:700,tag:'flood',sev:'one_lane',status:'expired',verified:false,confirmed:1,minsAgo:1500,t:'yesterday',street:'Old Market Rd',desc:'Knee-deep water yesterday evening.',photo:false,reporter:'Community'}];
+var advisories=[
+ {id:'a1',title:'Real St roadwork — lane closure',type:'roadwork',active:true,geom:{kind:'line',pts:[[360,440],[480,440],[600,440]]},start:'Sep 19, 8:00',end:'Fri 5:00 PM',by:'You'},
+ {id:'a2',title:'Flood-prone zone — Nula-tula',type:'flood_zone',active:true,geom:{kind:'area',pts:[[540,470],[660,455],[690,560],[560,590]]},start:'Ongoing',end:'Seasonal',by:'LGU DRRM'},
+ {id:'a3',title:'Main Blvd closure — fiesta',type:'road_closure',active:true,geom:{kind:'line',pts:[[760,140],[760,260]]},start:'Sep 21, 6:00',end:'Sep 22, 6:00',by:'LGU DRRM'}];
+
+/* ================= HELPERS ================= */
+function byId(id){for(var i=0;i<hazards.length;i++)if(hazards[i].id===id)return hazards[i];return null;}
+function ago(m){if(m<2)return 'just now';if(m<60)return m+' min ago';if(m<1440)return Math.round(m/60)+' h ago';return Math.round(m/1440)+' d ago';}
+function geomLabel(a){return a.geom.kind==='line'?'Line':a.geom.kind==='area'?'Area':('Point · '+a.geom.r+' m radius');}
+function fmtDT(v){if(!v)return '—';try{return new Date(v).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});}catch(e){return '—';}}
+function minPts(){return S.bMode==='point'?1:S.bMode==='line'?2:3;}
+function windowTypeFiltered(){return hazards.filter(function(h){return (Date.now()/6e4-(Date.now()/6e4-h.minsAgo))>=0;}).filter(function(h){return h.minsAgo<=WINDOWS[S.win];}).filter(function(h){return S.type==='all'||h.tag===S.type;});}
+function activeAdvs(){return advisories.filter(function(a){return a.active;});}
+function needsVCount(){return hazards.filter(function(h){return h.status==='needs_verification';}).length;}
+
+/* ================= SVG MAP DRAWING ================= */
+function pinSvg(p,sel){
+ var color=p.status==='hazard_cleared'?'var(--success)':(p.sev==='impassable'?'var(--danger)':p.sev==='one_lane'?'var(--warning)':'var(--caution)');
+ var dash=(!p.verified&&p.confirmed<2)?' stroke-dasharray="4 3"':'';
+ var s='<g class="hpin'+(sel?' sel':'')+(p.status==='hazard_cleared'?' cleared':'')+'" data-pin="'+p.id+'" transform="translate('+p.sx+' '+p.sy+')">'
+  +'<circle r="15" fill="'+color+'" stroke="var(--surface)" stroke-width="2.5"'+dash+'/>'
+  +'<use href="#t-'+p.tag+'" x="-8" y="-8" width="16" height="16" fill="none" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>';
+ if(p.verified)s+='<g transform="translate(10 10)"><circle r="7.5" fill="var(--primary-ink)" stroke="var(--surface)" stroke-width="2"/>'
+  +'<use href="#i-shieldc" x="-4.5" y="-4.5" width="9" height="9" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></g>';
+ s+='<circle class="selring" r="17"/></g>';
+ return s;
+}
+function advSvg(a,dim){
+ var g=a.geom,op=dim?' style="opacity:.3"':'',s='<g class="advG" data-adv="'+a.id+'"'+op+'>';
+ if(g.kind==='line'){
+  var d='M'+g.pts.map(function(p){return p[0]+' '+p[1];}).join(' L');
+  var m=g.pts[Math.floor(g.pts.length/2)];
+  s+='<path class="hit" d="'+d+'"/><path class="advL '+a.type+'" d="'+d+'"/>'
+   +'<text class="advT" x="'+(m[0]+10)+'" y="'+(m[1]-10)+'">'+a.title.toUpperCase()+'</text>';
+ }else if(g.kind==='area'){
+  var d2='M'+g.pts.map(function(p){return p[0]+' '+p[1];}).join(' L')+' Z';
+  s+='<path class="advZ" d="'+d2+'"/><text class="advT" x="'+(g.pts[0][0]+8)+'" y="'+(g.pts[0][1]+18)+'">'+a.title.toUpperCase()+'</text>';
+ }else{
+  var c=g.pts[0];
+  s+='<circle class="advC" cx="'+c[0]+'" cy="'+c[1]+'" r="'+g.r+'"/><circle class="advDot" cx="'+c[0]+'" cy="'+c[1]+'" r="5"/>'
+   +'<text class="advT" x="'+(c[0]+12)+'" y="'+(c[1]-10)+'">'+a.title.toUpperCase()+'</text>';
+ }
+ return s+'</g>';
+}
+function builderSvg(){
+ var P=S.bPts;if(!P.length)return '';
+ var d='M'+P.map(function(p){return p[0]+' '+p[1];}).join(' L'),s='';
+ if(S.bMode==='point'&&P.length===1){
+  s+='<circle class="advC" cx="'+P[0][0]+'" cy="'+P[0][1]+'" r="'+S.bRadius+'"/><circle class="advDot" cx="'+P[0][0]+'" cy="'+P[0][1]+'" r="6"/>';
+ }else{
+  if(S.bMode==='area'&&P.length>=3)s+='<path class="advZ" d="'+d+' Z"/>';
+  else if(P.length>=2)s+='<path class="advL" d="'+d+'"/>';
+  s+=P.map(function(p){return '<circle cx="'+p[0]+'" cy="'+p[1]+'" r="5" fill="var(--advisory)" stroke="var(--surface)" stroke-width="2.5"/>';}).join('');
+ }
+ return s;
+}
+function drawMap(gid,pins,advs,selH,dimAdv,withBuilder){
+ var g=document.getElementById(gid);if(!g)return;
+ var s='';
+ (advs||[]).forEach(function(a){if(a.active)s+=advSvg(a,!!dimAdv);});
+ if(withBuilder)s+=builderSvg();
+ pins.forEach(function(p){s+=pinSvg(p,selH===p.id);});
+ g.innerHTML=s;
+}
+
+/* ================= RENDER: counts / overview ================= */
+function renderCounts(){
+ var n=needsVCount();var b=$('#rvBadge');b.textContent=n;b.style.display=n?'':'none';
+}
+function statHtml(l,v,d,t){return '<div class="stat card"><span>'+l+'</span><b class="tnum">'+v+'</b>'+(d?'<i class="'+(t||'')+'">'+d+'</i>':'')+'</div>';}
+function renderOverview(){
+ var open=hazards.filter(function(h){return h.status!=='hazard_cleared'&&h.status!=='expired';}).length;
+ var nv=needsVCount(),r24=hazards.filter(function(h){return h.minsAgo<=1440;}).length,aa=activeAdvs().length;
+ $('#ovStats').innerHTML=statHtml('Open hazards',open,'unresolved','i-r')+statHtml('Needs verification',nv,nv?'review queue':'queue clear',nv?'i-r':'i-g')
+  +statHtml('Active advisories',aa,'yours + LGU','i-g')+statHtml('Reports · 24 h',r24,'▲ incoming','i-g');
+ var latest=hazards.filter(function(h){return h.status!=='expired';}).slice().sort(function(a,b){return a.minsAgo-b.minsAgo;}).slice(0,6);
+ $('#ovHaz').innerHTML=latest.map(function(h){
+  return '<div class="row"><span class="chip p">'+TAGS[h.tag]+'</span><span class="ai"><b style="font-weight:600">'+h.street+'</b><div class="hint">'+h.t+' · '+ago(h.minsAgo)+'</div></span>'
+   +'<span class="chip '+(STC[h.status]||'')+'">'+STL[h.status]+'</span></div>';}).join('')
+  ||'<p class="hint">No hazards reported yet.</p>';
+ $('#ovAdv').innerHTML=advisories.map(function(a){
+  return '<div class="row"><span class="ai"><b style="font-weight:600">'+a.title+'</b><div class="hint">'+TYPE_L[a.type]+' · '+a.start+' → '+a.end+'</div></span>'
+   +'<span class="chip '+(a.active?'gn':'')+'">'+(a.active?'active':'inactive')+'</span></div>';}).join('')
+  ||'<p class="hint">No advisories yet.</p>';
+}
+
+/* ================= RENDER: command center ================= */
+function statusChipsHtml(){
+ var set=windowTypeFiltered(),counts={};
+ set.forEach(function(h){counts[h.status]=(counts[h.status]||0)+1;});
+ var defs=[['unconfirmed','var(--neutral)'],['needs_verification','var(--warning)'],['hazard_active','var(--danger)'],['hazard_cleared','var(--success)'],['expired','var(--ink2)']];
+ return defs.map(function(d){var k=d[0];
+  return '<button class="schip'+(S.statusOn[k]?' on':'')+'" data-k="'+k+'" style="--dot:'+d[1]+'" aria-pressed="'+S.statusOn[k]+'"><i></i>'+STL[k]+' <b>'+(counts[k]||0)+'</b></button>';}).join('');
+}
+function ccPanelHtml(){
+ var p=$('#ccPanel');
+ if(!S.ccSel){p.classList.add('empty');
+  p.innerHTML='<div class="ph"><svg class="ic" style="width:22px;height:22px;color:var(--primary)"><use href="#i-layers"/></svg>'
+   +'<b>Situational overview</b><p class="hint">Click any hazard pin or advisory on the map to inspect it and take official action. Filters above scope the view; everything here is realtime.</p>'
+   +'<ul class="hint"><li>Dashed ring = unconfirmed community report</li><li>Shield badge = LGU verified</li><li>Violet lines / areas = official advisories</li></ul></div>';
+  return;}
+ p.classList.remove('empty');
+ if(S.ccSel.kind==='hazard'){
+  var h=byId(S.ccSel.id);if(!h){S.ccSel=null;ccPanelHtml();return;}
+  p.innerHTML='<div class="chips"><span class="chip p">'+TAGS[h.tag]+'</span>'
+   +'<span class="chip '+(SEVC[h.sev]||'a')+'">'+SEVL[h.sev]+'</span>'
+   +'<span class="chip '+(STC[h.status]||'')+'">'+STL[h.status]+'</span>'
+   +(h.verified?'<span class="chip v">LGU verified</span>':'')+'</div>'
+   +(h.photo?'<div class="cphoto"><svg class="ic"><use href="#i-camera"/></svg>Photo evidence<span class="hint">0.3 MB compressed</span></div>':'')
+   +'<p class="desc">'+h.desc+'</p>'
+   +'<div class="kv"><span>Reported</span><b>'+h.t+' · '+ago(h.minsAgo)+'</b></div>'
+   +'<div class="kv"><span>Location</span><b>'+h.street+'</b></div>'
+   +'<div class="kv"><span>Reporter</span><b>'+h.reporter+(h.reporter.indexOf('LGU')===0?' · agency':' · community')+'</b></div>'
+   +'<div class="kv"><span>Community confirmations</span><b>'+h.confirmed+'</b></div>'
+   +'<div class="acts"><button class="btn adv" id="ccA">Confirm Active</button><button class="btn adv" id="ccC">Confirm Cleared</button></div>'
+   +'<p class="hint">Official confirmations set the verified badge, adjust lifetime, and are authoritative in routing.</p>'
+   +'<div class="links"><button class="lnk" id="ccReview">Open in Hazard Review →</button>'
+   +'<button class="lnk" id="ccZoomBtn">'+(S.zoomed?'Reset view':'Zoom to marker')+'</button></div>';
+ }else{
+  var a=null;advisories.forEach(function(x){if(x.id===S.ccSel.id)a=x;});
+  if(!a){S.ccSel=null;ccPanelHtml();return;}
+  p.innerHTML='<div class="chips"><span class="chip v">'+TYPE_L[a.type]+'</span><span class="chip">'+geomLabel(a)+'</span>'
+   +'<span class="chip '+(a.active?'gn':'')+'">'+(a.active?'active':'inactive')+'</span></div>'
+   +'<b style="font-size:15px">'+a.title+'</b>'
+   +'<div class="kv"><span>Window</span><b>'+a.start+' → '+a.end+'</b></div>'
+   +'<div class="kv"><span>Published by</span><b>'+a.by+'</b></div>'
+   +'<div class="acts" style="align-items:center"><span class="sw '+(a.active?'on':'')+'" data-advsw="'+a.id+'" role="switch" aria-checked="'+a.active+'"></span>'
+   +'<span class="hint">'+(a.active?'Public · authoritative in routing':'Hidden from public map')+'</span></div>';
+ }
+}
+function renderCC(){
+ var set=windowTypeFiltered();
+ var openAll=hazards.filter(function(h){return h.status!=='hazard_cleared'&&h.status!=='expired';}).length;
+ $('#stOpen').textContent=openAll;
+ $('#stNv').textContent=needsVCount();
+ $('#stAdv').textContent=activeAdvs().length;
+ $('#st24').textContent=hazards.filter(function(h){return h.minsAgo<=1440;}).length;
+ var shown=set.filter(function(h){return S.statusOn[h.status];});
+ $('#stShowing').textContent='Showing '+shown.length+' of '+hazards.length;
+ $('#schips').innerHTML=statusChipsHtml();
+ drawMap('ccOvl',shown,S.showAdv?activeAdvisories():[],S.ccSel&&S.ccSel.kind==='hazard'?S.ccSel.id:null,false,false);
+ ccPanelHtml();applyZoom();
+}
+
+/* ================= RENDER: review ================= */
+function reviewList(){
+ return hazards.filter(function(h){return h.status!=='expired';})
+  .filter(function(h){return S.rvFilter==='all'?true:h.status===S.rvFilter;})
+  .slice().sort(function(a,b){return a.minsAgo-b.minsAgo;});
+}
+function renderReview(){
+ var list=reviewList();
+ if(S.rvSel&&!list.some(function(h){return h.id===S.rvSel;}))S.rvSel=null;
+ if(!S.rvSel&&list.length)S.rvSel=list[0].id;
+ $('#rItems').innerHTML=list.map(function(h){
+  var col=h.status==='hazard_cleared'?'var(--success)':(h.sev==='impassable'?'var(--danger)':h.sev==='one_lane'?'var(--warning)':'var(--caution)');
+  return '<button class="ritem'+(S.rvSel===h.id?' on':'')+'" data-id="'+h.id+'"><span class="dot" style="background:'+col+'"></span>'
+   +'<span class="mid"><b>'+TAGS[h.tag]+' · '+h.street+'</b><small>'+h.t+' · '+ago(h.minsAgo)+' · '+h.confirmed+' confirmations</small></span>'
+   +'<span class="chip '+(STC[h.status]||'')+'">'+STL[h.status]+'</span></button>';}).join('')
+  ||'<p class="hint" style="padding:16px">Queue is clear. 🎉</p>';
+ drawMap('rOvl',hazards.filter(function(h){return h.status!=='expired';}),activeAdvisories(),S.rvSel,false,false);
+ var sel=byId(S.rvSel),box=$('#rInfo');
+ if(!sel){box.innerHTML='<div class="ph" style="align-items:flex-start"><svg class="ic" style="color:var(--success)"><use href="#i-check"/></svg><b>Nothing to review</b><span class="hint">No hazards match this filter right now.</span></div>';return;}
+ box.innerHTML='<div class="chips"><span class="chip p">'+TAGS[sel.tag]+'</span>'
+  +'<span class="chip '+(SEVC[sel.sev]||'a')+'">'+SEVL[sel.sev]+'</span>'
+  +'<span class="chip '+(STC[sel.status]||'')+'">'+STL[sel.status]+'</span>'
+  +(sel.verified?'<span class="chip v">LGU verified</span>':'')+'</div>'
+  +(sel.photo?'<div class="cphoto"><svg class="ic"><use href="#i-camera"/></svg>Photo evidence<span class="hint">0.3 MB compressed</span></div>':'')
+  +'<p class="desc">'+sel.desc+'</p>'
+  +'<div class="kv"><span>Reported</span><b>'+sel.t+' · '+ago(sel.minsAgo)+' · '+sel.street+'</b></div>'
+  +'<div class="kv"><span>Reporter</span><b>'+sel.reporter+(sel.reporter.indexOf('LGU')===0?' · agency':' · community')+'</b></div>'
+  +'<div class="kv"><span>Community confirmations</span><b>'+sel.confirmed+'</b></div>'
+  +'<div class="acts"><button class="btn adv" id="rA">Official confirm — Hazard Active</button><button class="btn adv" id="rC">Official confirm — Hazard Cleared</button></div>'
+  +'<p class="hint">Official confirmations are attributed to your agency, set the verified badge, and are authoritative in routing.</p>'
+  +'<button class="lnk" id="rCC">View on Command Center →</button>';
+}
+
+/* ================= RENDER: advisories list + builder ================= */
+function renderAdvs(){
+ $('#advList').innerHTML=advisories.map(function(a){
+  return '<div class="arow"><span class="ai" style="flex:1;min-width:0"><b>'+a.title+'</b>'
+   +'<div class="hint">'+TYPE_L[a.type]+' · '+a.start+' → '+a.end+' · by '+a.by+'</div></span>'
+   +'<span class="chip v">'+geomLabel(a)+'</span>'
+   +'<span class="sw '+(a.active?'on':'')+'" data-advsw="'+a.id+'" role="switch" aria-checked="'+a.active+'"></span></div>';}).join('')
+  ||'<p class="hint" style="padding:8px 0">No advisories yet — publish your first one.</p>';
+}
+function renderBuilder(){
+ $('#bType').value=S.bType;
+ $$('#modeSeg button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-mode')===S.bMode);});
+ $$('#schedSeg button').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-sc')===S.bSched);});
+ $('#radWrap').style.display=S.bMode==='point'?'block':'none';
+ $('#radVal').textContent=S.bRadius+' m';
+ $('#customDates').style.display=S.bSched==='custom'?'grid':'none';
+ $('#bCount').textContent=S.bPts.length+' pts';
+ $('#bHint').textContent=S.bMode==='point'?'Click the map to place the advisory center, then set the radius.'
+  :S.bMode==='line'?('Click along the affected road — '+S.bPts.length+'/'+minPts()+'+ points.')
+  :('Click the corners of the affected area — '+S.bPts.length+'/'+minPts()+'+ points.');
+ $('#bHint2').textContent=S.bMode==='point'?'Click the map to place the advisory center'
+  :S.bMode==='line'?'Click along the affected road to trace it':'Click the corners of the affected area';
+ var ok=S.bMode==='point'?S.bPts.length===1:S.bPts.length>=minPts();
+ $('#bPublish').disabled=!ok;
+ drawMap('bOvl',[],advisories,S.bMode,false,true);
+}
+
+/* ================= ACTIONS ================= */
+function renderCurrent(){
+ renderCounts();
+ if(S.sec==='overview')renderOverview();
+ else if(S.sec==='command')renderCC();
+ else if(S.sec==='review')renderReview();
+ else if(S.sec==='advs')renderAdvs();
+ else if(S.sec==='builder')renderBuilder();
+}
+function go(sec){S.sec=sec;
+ $$('.anav').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-sec')===sec);});
+ $$('.sec').forEach(function(s){s.classList.toggle('on',s.id==='sec-'+sec);});
+ renderCurrent();}
+function officialConfirm(id,kind){
+ var h=byId(id);if(!h)return;
+ h.verified=true;h.confirmed=(h.confirmed||0)+1;
+ h.status=kind==='active'?'hazard_active':'hazard_cleared';
+ toast(kind==='active'?'Officially confirmed ACTIVE — public map updated':'Officially confirmed CLEARED — public map updated','g');
+ renderCurrent();
+}
+function toggleAdv(id,v){
+ advisories.forEach(function(a){if(a.id===id)a.active=v;});
+ toast(v?'Advisory reactivated — live on public map':'Advisory deactivated — removed from public map',v?'g':'w');
+ renderCurrent();
+}
+function zoomOrigin(sx,sy){
+ var el=$('#ccMapBox'),r=el.getBoundingClientRect();
+ var sc=Math.max(r.width/1200,r.height/760);
+ var ox=(1200*sc-r.width)/2,oy=(760*sc-r.height)/2;
+ return (((sx*sc-ox)/r.width)*100)+'% '+(((sy*sc-oy)/r.height)*100)+'%';
+}
+function applyZoom(){
+ var z=$('#ccZoom');
+ if(S.zoomed){z.style.transformOrigin=zoomOrigin(S.zoomed[0],S.zoomed[1]);z.classList.add('on');}
+ else z.classList.remove('on');
+}
+var SIM_SPOTS=[[520,320],[660,440],[340,500],[820,260],[560,200],[700,560],[430,380],[240,320]];
+var SIM_STREETS=['Quezon Blvd','Real St','Sagkahan Rd','Main Blvd','Dela Paz St','Rizal Ave'];
+function simulate(){
+ var tags=['flood','pothole','obstruction'],t=tags[Math.floor(Math.random()*tags.length)];
+ var sev=['passable','one_lane','impassable'][Math.floor(Math.random()*3)];
+ var spot=SIM_SPOTS[Math.floor(Math.random()*SIM_SPOTS.length)];
+ var st=SIM_STREETS[Math.floor(Math.random()*SIM_STREETS.length)];
+ hazards.unshift({id:'n'+Date.now(),sx:spot[0],sy:spot[1],tag:t,sev:sev,status:'unconfirmed',verified:false,confirmed:0,minsAgo:0,t:'now',street:st,desc:'(newly reported — details pending)',photo:false,reporter:'Community'});
+ toast('New report — '+TAGS[t]+' · '+st,'w');
+ renderCurrent();
+}
+function publish(){
+ var ok=S.bMode==='point'?S.bPts.length===1:S.bPts.length>=minPts();
+ if(!ok){toast('Trace at least '+minPts()+' point'+(minPts()>1?'s':'')+' first','w');return;}
+ var title=$('#bTitle').value.trim();
+ if(!title){toast('Add a title before publishing','w');return;}
+ var geom=S.bMode==='point'?{kind:'circle',pts:[S.bPts[0]],r:S.bRadius}:{kind:S.bMode==='area'?'area':'line',pts:S.bPts.slice()};
+ var win=S.bSched==='now'?{s:'Now + 2 h',e:'auto-expire'}:S.bSched==='open'?{s:'Open-ended',e:'—'}:{s:fmtDT(S.bStart),e:fmtDT(S.bEnd)};
+ advisories.unshift({id:'a'+Date.now(),title:title,type:S.bType,active:true,geom:geom,start:win.s,end:win.e,by:'You'});
+ toast('Advisory published — live for all users and weighted in routing','g');
+ go('advs');
+}
+function evtToSvg(e,el){
+ var r=el.getBoundingClientRect();
+ var sc=Math.max(r.width/1200,r.height/760);
+ var ox=(1200*sc-r.width)/2,oy=(760*sc-r.height)/2;
+ return [(e.clientX-r.left+ox)/sc,(e.clientY-r.top+oy)/sc];
+}
+
+/* ================= EVENT ROUTER ================= */
+document.addEventListener('click',function(e){
+ var t=e.target,c;
+ function C(sel){return t.closest?t.closest(sel):null;}
+ /* proto bar */
+ if(c=C('#psim')){simulate();return;}
+ if(c=C('#ptheme')){S.theme=S.theme==='light'?'dark':'light';document.documentElement.setAttribute('data-theme',S.theme);c.textContent=S.theme==='light'?'◐ Light':'◑ Dark';return;}
+ if(c=C('#preset')){location.reload();return;}
+ if(c=C('#lnkMap')){toast('The public map lives in the phone prototype — this console is the LGU surface.');return;}
+ /* nav */
+ if(c=C('.anav')){go(c.getAttribute('data-sec'));return;}
+ if(c=C('[data-goto]')){go(c.getAttribute('data-goto'));return;}
+ /* map pins + advisories (context by container) */
+ if(c=C('[data-pin]')){
+  var pid=c.getAttribute('data-pin');
+  if(c.closest('#ccOvl')){S.ccSel={kind:'hazard',id:pid};renderCC();}
+  else if(c.closest('#rOvl')){S.rvSel=pid;renderReview();}
+  return;}
+ if(c=C('[data-adv]')){
+  if(c.closest('#ccOvl')){S.ccSel={kind:'adv',id:c.getAttribute('data-adv')};renderCC();}
+  return;}
+ if(c=C('#ccMapBox')){if(S.ccSel){S.ccSel=null;renderCC();}return;}
+ /* command controls */
+ if(c=C('#wseg [data-w]')){S.win=c.getAttribute('data-w');$$('#wseg button').forEach(function(b){b.classList.toggle('on',b===c);});renderCC();return;}
+ if(c=C('#schips [data-k]')){var k=c.getAttribute('data-k');S.statusOn[k]=!S.statusOn[k];renderCC();return;}
+ if(c=C('#advSw')){S.showAdv=!S.showAdv;c.classList.toggle('on',S.showAdv);
+  if(S.ccSel&&S.ccSel.kind==='adv'&&!S.showAdv)S.ccSel=null;renderCC();return;}
+ if(c=C('#ccA')){if(S.ccSel)officialConfirm(S.ccSel.id,'active');return;}
+ if(c=C('#ccC')){if(S.ccSel)officialConfirm(S.ccSel.id,'cleared');return;}
+ if(c=C('#ccReview')){if(S.ccSel){S.rvFilter='all';S.rvSel=S.ccSel.id;go('review');}return;}
+ if(c=C('#ccZoomBtn')){if(S.zoomed)S.zoomed=null;else{var h=byId(S.ccSel.id);if(h)S.zoomed=[h.sx,h.sy];}renderCC();return;}
+ /* review */
+ if(c=C('#ftabs [data-f]')){S.rvFilter=c.getAttribute('data-f');S.rvSel=null;renderReview();return;}
+ if(c=C('.ritem')){S.rvSel=c.getAttribute('data-id');renderReview();return;}
+ if(c=C('#rA')){if(S.rvSel)officialConfirm(S.rvSel,'active');return;}
+ if(c=C('#rC')){if(S.rvSel)officialConfirm(S.rvSel,'cleared');return;}
+ if(c=C('#rCC')){if(S.rvSel){S.ccSel={kind:'hazard',id:S.rvSel};go('command');}return;}
+ /* advisories */
+ if(c=C('#newAdv')){go('builder');return;}
+ if(c=C('#bUndo')){S.bPts=S.bPts.slice(0,-1);renderBuilder();return;}
+ if(c=C('#bClear')){S.bPts=[];renderBuilder();return;}
+ if(c=C('#bPublish')){publish();return;}
+ if(c=C('#bCancel')){go('advs');return;}
+ if(c=C('#modeSeg [data-mode]')){S.bMode=c.getAttribute('data-mode');S.bPts=[];renderBuilder();return;}
+ if(c=C('#schedSeg [data-sc]')){S.bSched=c.getAttribute('data-sc');renderBuilder();return;}
+ if(c=C('[data-advsw]')){var aid=c.getAttribute('data-advsw'),cur=null;
+  advisories.forEach(function(a){if(a.id===aid)cur=a.active;});toggleAdv(aid,!cur);return;}
+});
+
+/* direct bindings */
+document.getElementById('typeSel').addEventListener('change',function(e){S.type=e.target.value;renderCC();});
+document.getElementById('rad').addEventListener('input',function(e){S.bRadius=+e.target.value;renderBuilder();});
+document.getElementById('bStart').addEventListener('change',function(e){S.bStart=e.target.value;});
+document.getElementById('bEnd').addEventListener('change',function(e){S.bEnd=e.target.value;});
+document.getElementById('bmapwrap').addEventListener('click',function(e){
+ if(S.sec!=='builder')return;
+ var xy=evtToSvg(e,this);
+ if(S.bMode==='point')S.bPts=[xy];else S.bPts.push(xy);
+ renderBuilder();
+});
+window.addEventListener('resize',function(){if(S.zoomed)applyZoom();});
+setInterval(function(){var el=$('#syncT');if(el)el.textContent='synced '+new Date().toLocaleTimeString([], {hour12:false});},1000);
+
+/* init */
+try{renderCounts();go('overview');}catch(err){showErr(err.message);}
+})();
+</script>
+</body></html>

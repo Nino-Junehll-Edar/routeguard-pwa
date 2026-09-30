@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { loadAgencyRequests, approveAgencyRequest, rejectAgencyRequest } from '$lib/agencyUtils';
+  import { loadAgencyRequests, approveAgencyRequest, rejectAgencyRequest, type AgencyRequest } from '$lib/agencyUtils';
   import { user } from '$lib/authStore';
   import { profile } from '$lib/stores/profile';
   import { get } from 'svelte/store';
@@ -15,8 +15,8 @@
 
   // Check if user is authorized (admin) to view this page
   async function checkAuthorization() {
-    const currentUser = user.get();
-    const profileData = profile.get();
+    const currentUser = get(user);
+    const profileData = get(profile);
 
     if (!currentUser) {
       // Not signed in, redirect to login

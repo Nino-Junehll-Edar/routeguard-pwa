@@ -6,7 +6,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import { supabase } from '$lib/supabaseClient';
   import { loadProfile, profile } from '$lib/stores/profile';
-  import { toast } from '$lib/stores/toast';
+  import { show } from '$lib/stores/toast';
 
   let email = '';
   let password = '';
@@ -39,15 +39,17 @@
       const { error: e } = await supabase.auth.signUp({
         email: email.trim(),
         password,
-        data: {
-          full_name: fullName
+        options: {
+          data: {
+            full_name: fullName
+          }
         }
       });
       if (e) {
         error = friendly(e.message);
         return;
       }
-      toast('Check your email for confirmation link', 'g');
+      show('Check your email for confirmation link', 'g');
       goto('/login');
     } finally {
       loading = false;

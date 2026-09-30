@@ -1,0 +1,139 @@
+<script lang="ts">
+  import { onMount, onDestroy, createEventDispatcher } from 'svelte';
+  import L from 'leaflet';
+  import 'leaflet/dist/leaflet.css';
+  import { TAGS, TACLOBAN, deriveTrust, toLatLng } from '$lib/constants';
+  import { ICONS, glyphSvg } from '$lib/icons';
+  import type { Hazard, Advisory, LatLng } from '$lib/types';
+
+  export let hazards: Hazard[] = [];
+  export let advisories: Advisory[] = [];
+  export let route: LatLng[] | null = null;
+  export let user: (LatLng & { accuracy?: number; stale?: boolean }) | null = null;
+  export let center: [number, number] = TACLOBAN;
+  export let zoom = 14;
+  export let showAdvisories = true;
+  export let pickMode = false;
+  export let selectedId: string | null = null;
+
+  const dispatch = createEventDispatcher<{
+    ready: void; hazardclick: string; advisoryclick: string; mapclick: LatLng;
+  }>();
+
+  let el: HTMLElement;
+  let map: L.Map | null = null;
+  let hazardLayer: L.LayerGroup; let advisoryLayer: L.LayerGroup;
+  let routeLayer: L.LayerGroup; let userLayer: L.LayerGroup;
+  let userDot: L.Marker | null = null; let userAcc: L.Circle | null = null;
+
+  onMount(() => {
+    map = L.map(el, { zoomControl: false }).setView(center, zoom);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+    advisoryLayer = L.layerGroup().addTo(map);
+    hazardLayer = L.layerGroup().addTo(map);
+    routeLayer = L.layerGroup().addTo(map);
+    userLayer = L.layerGroup().addTo(map);
+    map.on('click', (e) => { if (pickMode) dispatch('mapclick', { lat: e.latlng.lat, lng: e.latlng.lng }); });
+    dispatch('ready');
+    const ro = new ResizeObserver(() => map?.invalidateSize());
+    ro.observe(el);
+    return () => { ro.disconnect(); map?.remove(); map = null; };
+  });
+  onDestroy(() => { map?.remove(); });
+
+  function hIcon(h: Hazard, selId: string | null): L.DivIcon {
+    const trust = deriveTrust(h);
+    const sev = h.severity ?? 'one_lane';
+    const glyph = TAGS[h.hazard_type]?.icon ?? 'h-other';
+    const cls = `hz-wrap sev-${sev} t-${trust}${h.status === 'hazard_cleared' ? ' cleared' : ''}${h.id === selId ? ' sel' : ''}`;
+    const html =
+      `<div class="${cls}">` +
+      (trust === 'queued' ? `<i class="qb">${glyphSvg('clock', 'currentColor', 9)}</i>` : '') +
+      `<span class="dot">${glyphSvg(glyph, '#fff', 16)}</span>` +
+      (trust === 'verified' ? `<i class="bdg">${glyphSvg('shield-check', '#fff', 9)}</i>` : '') +
+      `</div>`;
+    return L.divIcon({ html, iconSize: [36, 36], iconAnchor: [18, 18], className: '' });
+  }
+
+  $: if (map) drawHazards(hazards, selectedId);
+  function drawHazards(list: Hazard[], selId: string | null = null) {
+    if (!hazardLayer) return;
+    hazardLayer.clearLayers();
+    for (const h of list) {
+      const ll = toLatLng(h.location); if (!ll) continue;
+      L.marker([ll.lat, ll.lng], { icon: hIcon(h, selId), title: TAGS[h.hazard_type]?.label })
+        .on('click', () => dispatch('hazardclick', h.id))
+        .addTo(hazardLayer);
+    }
+  }
+
+  $: if (map) drawAdvisories(advisories, showAdvisories);
+  function drawAdvisories(list: Advisory[], show: boolean) {
+    if (!advisoryLayer) return;
+    advisoryLayer.clearLayers();
+    if (!show) return;
+    for (const a of list) {
+      const g = a.geometry; if (!g) continue;
+      const style = { color: 'var(--advisory)', weight: a.advisory_type === 'road_closure' ? 8 : 6, opacity: .95,
+        dashArray: a.advisory_type === 'roadwork' ? '11 8' : undefined };
+      const make = (latlngs: L.LatLngExpression[]) => {
+        const layer = g.type === 'Polygon'
+          ? L.polygon(latlngs as L.LatLngExpression[][], { color: 'var(--advisory)', weight: 2, fillOpacity: .15 })
+          : L.polyline(latlngs, style);
+        layer.bindTooltip(a.title.toUpperCase(), { permanent: true, direction: 'center', className: 'adv-tip' });
+        layer.on('click', () => dispatch('advisoryclick', a.id));
+        layer.addTo(advisoryLayer);
+      };
+      if (g.type === 'LineString') make((g.coordinates as number[][]).map(([lng, lat]) => [lat, lng]));
+      else if (g.type === 'Polygon') make((g.coordinates as number[][][])[0].map(([lng, lat]) => [lat, lng]));
+      else if (g.type === 'Point') {
+        const [lng, lat] = g.coordinates as number[];
+        if ((a as any).radius_m) {
+          L.circle([lat, lng], { radius: (a as any).radius_m, color: 'var(--advisory)', weight: 2, fillOpacity: .15 })
+            .bindTooltip(a.title.toUpperCase(), { permanent: true, direction: 'center', className: 'adv-tip' })
+            .on('click', () => dispatch('advisoryclick', a.id))
+            .addTo(advisoryLayer);
+        } else {
+          L.circleMarker([lat, lng], { radius: 10, color: 'var(--advisory)', fillOpacity: .3 })
+            .on('click', () => dispatch('advisoryclick', a.id))
+            .addTo(advisoryLayer);
+        }
+      }
+    }
+  }
+
+  $: if (map) drawRoute(route);
+  function drawRoute(r: LatLng[] | null) {
+    if (!routeLayer) return;
+    routeLayer.clearLayers();
+    if (!r || r.length < 2) return;
+    const pts = r.map((p) => [p.lat, p.lng]) as L.LatLngExpression[];
+    L.polyline(pts, { color: 'var(--surface)', weight: 12, opacity: .9 }).addTo(routeLayer);
+    L.polyline(pts, { color: 'var(--route)', weight: 8 }).addTo(routeLayer);
+  }
+
+  $: if (map) drawUser(user);
+  function drawUser(u: typeof user) {
+    if (!userLayer) return;
+    if (!u || u.lat == null) return;
+    if (userDot) { userDot.setLatLng([u.lat, u.lng]); userAcc?.setLatLng([u.lat, u.lng]); }
+    else {
+      userDot = L.marker([u.lat, u.lng], {
+        icon: L.divIcon({ className: '', html: '<div class="rg-udot"></div>', iconSize: [16, 16], iconAnchor: [8, 8] }),
+      }).addTo(userLayer);
+    }
+    if (u.accuracy && u.accuracy > 10) {
+      if (userAcc) userAcc.setRadius(u.accuracy);
+      else userAcc = L.circle([u.lat, u.lng], { radius: u.accuracy, color: 'var(--route)', weight: 1, fillOpacity: .12 }).addTo(userLayer);
+    }
+  }
+
+  export function flyTo(lat: number, lng: number, z = 16) { map?.flyTo([lat, lng], z); }
+  export function invalidate() { map?.invalidateSize(); }
+</script>
+<div bind:this={el} class="rg-map" aria-label="Hazard map" role="application" />
+<style>
+  .rg-map { position:absolute; inset:0; background:var(--map-land); z-index:0; }
+</style>

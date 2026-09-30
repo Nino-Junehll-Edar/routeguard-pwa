@@ -1,0 +1,51 @@
+<script lang="ts">
+  import { goto } from '$app/navigation';
+  import { get } from 'svelte/store';
+  import ConsoleShell from '$lib/components/core/ConsoleShell.svelte';
+  import Button from '$lib/components/primitives/Button.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import { user } from '$lib/authStore';
+  import { profile, loadProfile, reviewCount } from '$lib/stores/profile';
+  import { initHazards, hazards } from '$lib/data/hazards';
+
+  let ready = false;
+  $: init($user);
+  async function init(u: any) {
+    if (!u) return goto('/login');
+    await loadProfile();
+    const p = get(profile);
+    if (!p || (p.role !== 'agency_personnel' && p.role !== 'admin')) return goto('/');
+    initHazards();
+    ready = true;
+  }
+  $: reviewCount.set($hazards.filter((h) => h.status === 'needs_verification').length);
+</script>
+
+{#if ready}
+  <ConsoleShell title="Agency Console" subtitle="RouteGuard · Tacloban LGU"
+    items={[
+      { href: '/agency', icon: 'gauge', label: 'Overview', exact: true },
+      { href: '/agency/command', icon: 'layers', label: 'Command Center' },
+      { href: '/agency/review', icon: 'warn', label: 'Hazard Review', badge: $reviewCount },
+      { href: '/agency/advisories', icon: 'flag', label: 'Advisories' },
+    ]}>
+    <div slot="foot" class="foot">
+      <a class="maplink" href="/"><Icon name="map" size={15} /> Open public map</a>
+      <div class="who">
+        <span class="av">{($profile?.full_name ?? 'A').slice(0, 2).toUpperCase()}</span>
+        <div><b>{$profile?.full_name ?? 'Agency user'}</b><span>Agency personnel</span></div>
+      </div>
+      <Button variant="ghost" size="sm" on:click={() => goto('/login')}>Switch account</Button>
+    </div>
+    <slot />
+  </ConsoleShell>
+{/if}
+
+<style>
+  .foot { display:flex; flex-direction:column; gap:10px; }
+  .maplink { display:flex; gap:7px; align-items:center; font-size:12.5px; font-weight:700; color:var(--primary); }
+  .who { display:flex; gap:10px; align-items:center; }
+  .who b { font-size:13px; display:block; } .who span { font-size:11px; color:var(--ink2); }
+  .av { width:36px; height:36px; border-radius:50%; background:var(--primary); color:#fff;
+    display:grid; place-items:center; font-weight:800; font-size:13px; flex:none; }
+</style>

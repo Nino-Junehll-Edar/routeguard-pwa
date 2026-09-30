@@ -1,13 +1,14 @@
 import { supabase } from './supabaseClient';
 import { user } from './authStore';
 import { profile } from '$lib/stores/profile';
+import { get } from 'svelte/store';
 import type { UserProfile } from '$lib/types/profile';
 
 /**
  * Fetch the current user's profile
  */
 export async function loadUserProfile(): Promise<UserProfile | null> {
-  const currentUser = user.get();
+  const currentUser = get(user);
   if (!currentUser) {
     profile.set(null);
     return null;
@@ -33,7 +34,7 @@ export async function loadUserProfile(): Promise<UserProfile | null> {
  * Update the current user's profile
  */
 export async function updateUserProfile(updates: Partial<UserProfile>): Promise<boolean> {
-  const currentUser = user.get();
+  const currentUser = get(user);
   if (!currentUser) return false;
 
   const { error } = await supabase

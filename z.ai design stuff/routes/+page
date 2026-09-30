@@ -1,0 +1,86 @@
+<script lang="ts">
+  import { onMount } from 'svelte';
+  import MapCanvas from '$lib/components/core/MapCanvas.svelte';
+  import FloatingSearch from '$lib/components/features/FloatingSearch.svelte';
+  import LayersPopover from '$lib/components/features/LayersPopover.svelte';
+  import HazardSheet from '$lib/components/features/HazardSheet.svelte';
+  import VerificationCard from '$lib/components/features/VerificationCard.svelte';
+  import Legend from '$lib/components/primitives/Legend.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import { initHazards, liveHazards, advisories, confirmHazard, refreshHazards } from '$lib/data/hazards';
+  import { geo } from '$lib/stores/geo';
+  import { toast } from '$lib/stores/toast';
+  import { haversine, toLatLng } from '$lib/constants';
+
+  let mapRef: MapCanvas;
+  let showAdv = true;
+  let layersOpen = false;
+  let selectedId: string | null = null;
+  let dismissedVer = new Set<string>();
+
+  onMount(() => { initHazards(); });
+
+  /* sheet target derives from the store — auto-updates on confirm, auto-closes on expiry */
+  $: selected = selectedId ? ($liveHazards.find((h) => h.id === selectedId) ?? null) : null;
+
+  /* nearest needs_verification hazard within alert radius, not dismissed */
+  $: verifiable = $geo.lat != null
+    ? ($liveHazards.find((h) => h.status === 'needs_verification'
+        && !dismissedVer.has(h.id)
+        && haversine({ lat: $geo.lat!, lng: $geo.lng! }, toLatLng(h.location)!) < 500) ?? null)
+    : null;
+  $: verifyDist = verifiable && $geo.lat != null
+    ? Math.round(haversine({ lat: $geo.lat!, lng: $geo.lng! }, toLatLng(verifiable.location)!)) + ' m' : '';
+
+  function dismissVerify() {
+    if (!verifiable) return;
+    dismissedVer = new Set([...dismissedVer, verifiable.id]); // reassign so reactivity fires
+  }
+
+  async function onVerify(e: CustomEvent<'hazard_active' | 'hazard_cleared'>) {
+    if (!verifiable) return;
+    try {
+      await confirmHazard(verifiable.id, e.detail);
+      toast(e.detail === 'hazard_active' ? 'Confirmed active — thanks!' : 'Confirmed cleared — thanks!', 'g');
+      dismissVerify();
+      refreshHazards();
+    } catch { toast('Confirmation failed — check connection', 'r'); }
+  }
+</script>
+
+<div class="map-page">
+  <MapCanvas bind:this={mapRef} hazards={$liveHazards} advisories={$advisories}
+    showAdvisories={showAdv} selectedId={selectedId}
+    user={$geo.lat != null ? { lat: $geo.lat, lng: $geo.lng!, accuracy: $geo.accuracy } : null}
+    on:hazardclick={(e) => (selectedId = e.detail)} />
+
+  <FloatingSearch />
+  <div class="mbtns">
+    <button aria-label="Layers" on:click={() => (layersOpen = !layersOpen)}><Icon name="layers" size={21} /></button>
+    <button aria-label="My location" on:click={() => $geo.lat != null && mapRef.flyTo($geo.lat, $geo.lng!, 16)}>
+      <Icon name="locate" size={21} />
+    </button>
+  </div>
+  <LayersPopover bind:open={layersOpen} bind:showAdvisories />
+  <Legend />
+
+  {#if verifiable && !selected}
+    <VerificationCard hazard={verifiable} distance={verifyDist} on:confirm={onVerify} on:dismiss={dismissVerify} />
+  {/if}
+
+  {#if selected}
+    <HazardSheet hazard={selected}
+      on:close={() => (selectedId = null)}
+      on:changed={() => refreshHazards()} />
+  {/if}
+</div>
+
+<style>
+  .map-page { position:fixed; inset:0; }
+  .mbtns { position:fixed; right:12px; bottom:calc(var(--nav-h) + 90px); z-index:20;
+    display:flex; flex-direction:column; gap:10px; }
+  .mbtns button { width:48px; height:48px; border-radius:var(--r-m); background:var(--raised);
+    border:1px solid var(--border); box-shadow:var(--e1); display:grid; place-items:center;
+    color:var(--ink2); cursor:pointer; }
+  @media (min-width:1024px) { .mbtns { bottom:24px; } }
+</style>

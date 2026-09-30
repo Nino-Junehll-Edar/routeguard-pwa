@@ -1,0 +1,38 @@
+<script lang="ts">
+  import '$lib/styles/tokens.css';
+  import '$lib/styles/base.css';
+  import '$lib/styles/map.css';
+  import { onMount } from 'svelte';
+  import { browser } from '$app/environment';
+  import AppShell from '$lib/components/core/AppShell.svelte';
+  import Toasts from '$lib/components/primitives/Toasts.svelte';
+  import ConfirmHost from '$lib/components/primitives/ConfirmHost.svelte';
+  import InstallPrompt from '$lib/components/primitives/InstallPrompt.svelte';
+  import UpdatePrompt from '$lib/components/primitives/UpdatePrompt.svelte';
+  import { initAuth } from '$lib/authStore';
+  import { startGeo } from '$lib/stores/geo';
+  import { online } from '$lib/stores/online';
+  import { theme } from '$lib/stores/theme';
+  import { flushQueue } from '$lib/data/queue';
+
+  onMount(() => {
+    initAuth(); // inside its onAuthStateChange, also call loadProfile() from $lib/stores/profile
+    startGeo();
+    navigator.storage?.persist?.().catch(() => {}); // protect tile cache + offline queue from eviction
+  });
+
+  // flush queued offline reports whenever connectivity changes (and on open while online)
+  $: if ($online) flushQueue();
+
+  // PWA status bar follows the manual theme toggle
+  $: if (browser) {
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', $theme === 'dark' ? '#0E1116' : '#F7F8FA');
+  }
+</script>
+
+<AppShell><slot /></AppShell>
+<Toasts />
+<InstallPrompt />
+<UpdatePrompt />
+<ConfirmHost />
