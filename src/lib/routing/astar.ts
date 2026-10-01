@@ -368,8 +368,8 @@ function reconstructPath(
  */
 async function getHazardWeightAtLocation(lat: number, lng: number): Promise<number> {
   try {
-    // Find hazards within 50 meters of this point
-    const { data, error } = await supabase.rpc('get_hazards_near_point', {
+    // Find point-based hazards within 50 meters of this point
+    const { data: pointData, error: pointError } = await supabase.rpc('get_hazards_near_point', {
       p_latitude: lat,
       p_longitude: lng,
       p_radius_meters: 50,
@@ -380,19 +380,38 @@ async function getHazardWeightAtLocation(lat: number, lng: number): Promise<numb
       p_offset: 0
     });
 
-    if (error) {
-      console.error('Error fetching hazards for location:', error);
-      throw error;
+    // Find shape-based hazards that contain this point
+    const { data: shapeData, error: shapeError } = await supabase.rpc('get_hazards_containing_point', {
+      p_latitude: lat,
+      p_longitude: lng,
+      p_hazard_types: null,
+      p_status: null,
+      p_include_expired: false,
+      p_limit: null,
+      p_offset: 0
+    });
+
+    if (pointError) {
+      console.error('Error fetching point hazards for location:', pointError);
+      throw pointError;
     }
 
-    if (!data || data.length === 0) {
+    if (shapeError) {
+      console.error('Error fetching shape hazards for location:', shapeError);
+      throw shapeError;
+    }
+
+    // Combine point and shape hazards
+    const allHazards = [...(pointData || []), ...(shapeData || [])];
+
+    if (!allHazards || allHazards.length === 0) {
       return 1.0; // No hazards nearby
     }
 
     // Calculate maximum weight multiplier from all nearby hazards
     let maxMultiplier = 1.0;
 
-    for (const { hazard } of data) {
+    for (const { hazard } of allHazards) {
       const typeWeights = HAZARD_WEIGHTS[hazard.hazard_type] || HAZARD_WEIGHTS.default;
       const weight = typeWeights[hazard.status] || 1.0;
       maxMultiplier = Math.max(maxMultiplier, weight);
@@ -408,6 +427,7 @@ async function getHazardWeightAtLocation(lat: number, lng: number): Promise<numb
 /**
  * Synchronous version of getHazardWeightAtLocation for use during path reconstruction
  * This is a simplified version that assumes low hazard for performance
+ * Note: Does not consider shape-based hazards for performance reasons
  */
 function getHazardWeightAtLocationSync(lat: number, lng: number): number {
   // For path reconstruction, we use a simplified approach

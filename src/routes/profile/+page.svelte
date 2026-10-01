@@ -22,12 +22,17 @@
     errorMessage = null;
     successMessage = null;
 
-    profile = await loadUserProfile();
-    if (profile) {
-      editedFullName = profile.full_name ?? '';
+    try {
+      profile = await loadUserProfile();
+      if (profile) {
+        editedFullName = profile.full_name ?? '';
+      }
+    } catch (error) {
+      console.error('Error loading profile:', error);
+      errorMessage = 'Unable to load profile. Please try again.';
+    } finally {
+      isLoading = false;
     }
-
-    isLoading = false;
   }
 
   async function handleUpdate() {
@@ -65,7 +70,9 @@
   {#if isLoading}
     <div class="loading">Loading profile...</div>
   {:else if !profile}
-    <div class="error">Unable to load profile. Please try again later.</div>
+    <div class="error">{errorMessage ?? 'Unable to load profile. Please try again later.'}</div>
+    <button on:click={loadProfile} class="btn-primary">Try again</button>
+    <a href="/map" class="btn-secondary">Back to map</a>
   {:else}
     <div class="profile-info">
       <h2>My Profile</h2>

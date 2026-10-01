@@ -80,10 +80,12 @@ export async function loadAgencyRequests(filters: { status?: string } = {}): Pro
 /**
  * Approve an agency request
  */
-export async function approveAgencyRequest(requestId: string): Promise<{ success: boolean; error?: string }> {
+export async function approveAgencyRequest(requestId: string, reason?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const { error } = await supabase.rpc('approve_agency_request', {
-      p_request_id: requestId
+    const { error } = await supabase.rpc('decide_agency_request', {
+      p_request_id: requestId,
+      p_approve: true,
+      p_reason: reason ?? null
     });
     if (error) return { success: false, error: error.message };
 
@@ -96,10 +98,12 @@ export async function approveAgencyRequest(requestId: string): Promise<{ success
 /**
  * Reject an agency request
  */
-export async function rejectAgencyRequest(requestId: string): Promise<{ success: boolean; error?: string }> {
+export async function rejectAgencyRequest(requestId: string, reason?: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const { error } = await supabase.rpc('reject_agency_request', {
-      p_request_id: requestId
+    const { error } = await supabase.rpc('decide_agency_request', {
+      p_request_id: requestId,
+      p_approve: false,
+      p_reason: reason ?? null
     });
 
     if (error) {

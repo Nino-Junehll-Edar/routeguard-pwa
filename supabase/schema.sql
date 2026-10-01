@@ -92,28 +92,17 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
 AS $$
 BEGIN
-    -- Check if profile already exists (to handle edge cases)
-    IF NOT EXISTS (
-        SELECT 1 FROM public.user_profiles WHERE id = NEW.id
-    ) THEN
-        INSERT INTO public.user_profiles (
-            id,
-            email,
-            full_name,
-            role,
-            created_at,
-            updated_at
-        ) VALUES (
-            NEW.id,
-            NEW.email,
-            COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
-            'common_user'::user_role,  -- Default role
-            NOW(),
-            NOW()
-        );
-    END IF;
+    INSERT INTO public.user_profiles (id, email, full_name)
+    VALUES (
+        NEW.id,
+        COALESCE(NEW.email, ''),
+        COALESCE(NEW.raw_user_meta_data->>'full_name', '')
+    )
+    ON CONFLICT (id) DO NOTHING;
     RETURN NEW;
 END;
 $$;
@@ -133,6 +122,8 @@ CREATE TABLE IF NOT EXISTS public.hazards (
         ON DELETE SET NULL,
 
     location GEOGRAPHY(POINT, 4326) NOT NULL,
+    building_id UUID REFERENCES public.buildings(id) ON DELETE SET NULL,
+    shape GEOGRAPHY,  -- Optional shape defining the hazard area (polygon, circle, etc.)
 
     hazard_type TEXT NOT NULL,
 
@@ -356,6 +347,43 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Buildings table for building-associated hazard reporting
+CREATE TABLE IF NOT EXISTS public.buildings (
+    id UUID PRIMARY KEY
+        DEFAULT gen_random_uuid(),
+
+    building_name TEXT NOT NULL,
+
+    building_code TEXT NOT NULL UNIQUE,
+
+    latitude DOUBLE PRECISION NOT NULL,
+
+    longitude DOUBLE PRECISION NOT NULL,
+
+    width_meters INTEGER,
+
+    height_meters INTEGER,
+
+    rotation_degrees INTEGER DEFAULT 0,
+
+    category TEXT CHECK (category IN ('academic', 'administrative', 'facility', 'sports', 'residential', 'other')),
+
+    description TEXT,
+
+    footprint GEOGRAPHY(POLYGON, 4326),  -- Building footprint as polygon
+
+    created_at TIMESTAMPTZ NOT NULL
+        DEFAULT NOW(),
+
+    updated_at TIMESTAMPTZ NOT NULL
+        DEFAULT NOW()
+);
+
+-- Index for building location queries
+CREATE INDEX IF NOT EXISTS idx_buildings_location
+    ON public.buildings
+    USING GIST (footprint);
+
 -- Enable Row Level Security
 ALTER TABLE public.user_profiles
     ENABLE ROW LEVEL SECURITY;
@@ -380,6 +408,20 @@ ALTER TABLE public.hazard_votes
 
 ALTER TABLE public.notifications
     ENABLE ROW LEVEL SECURITY;
+
+-- Table privileges are required before row-level security policies are evaluated.
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT SELECT ON TABLE public.hazards, public.agency_advisories,
+    public.hazard_confirmations, public.hazard_comments, public.hazard_votes,
+    public.buildings TO anon, authenticated;
+GRANT SELECT, UPDATE ON TABLE public.user_profiles TO authenticated;
+GRANT INSERT, UPDATE ON TABLE public.hazards TO authenticated;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.agency_requests TO authenticated;
+GRANT INSERT, UPDATE ON TABLE public.agency_advisories TO authenticated;
+GRANT INSERT ON TABLE public.hazard_confirmations TO authenticated;
+GRANT INSERT, UPDATE, DELETE ON TABLE public.hazard_comments TO authenticated;
+GRANT INSERT, UPDATE ON TABLE public.hazard_votes TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.notifications TO authenticated;
 
 -- User profile policies
 DROP POLICY IF EXISTS "Users can view their own profile"
@@ -522,6 +564,8 @@ CREATE POLICY "Anyone can view active agency advisories"
     ON public.agency_advisories
     FOR SELECT
     USING (is_active = TRUE);
+
+GRANT SELECT ON TABLE public.agency_advisories TO anon, authenticated;
 
 DROP POLICY IF EXISTS "Agency personnel can insert advisories"
     ON public.agency_advisories;
@@ -724,7 +768,7 @@ BEGIN
               FROM public.hazards h3
               WHERE h3.id = p_hazard_id
           ),
-          100
+          100::DOUBLE PRECISION
       )
       AND h.created_at > NOW() - INTERVAL '1 hour'
       AND h.status IN (

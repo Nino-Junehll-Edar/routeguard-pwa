@@ -1,7 +1,11 @@
 import type * as Leaflet from 'leaflet';
+import markerIcon2xUrl from 'leaflet/dist/images/marker-icon-2x.png';
+import markerIconUrl from 'leaflet/dist/images/marker-icon.png';
+import markerShadowUrl from 'leaflet/dist/images/marker-shadow.png';
 import type { Hazard } from '$lib/types/hazard';
 import type { AgencyAdvisory } from '$lib/types/hazard';
 import type { RouteResult } from '$lib/types/routing';
+import { normalizeHazardLocation } from './geoUtils';
 import { supabase } from './supabaseClient';
 
 let leaflet: typeof import('leaflet') | null = null;
@@ -69,6 +73,11 @@ export async function initializeMap(containerId: string): Promise<Leaflet.Map> {
 
   const L = leaflet ?? await import('leaflet');
   leaflet = L;
+  L.Icon.Default.mergeOptions({
+    iconRetinaUrl: markerIcon2xUrl,
+    iconUrl: markerIconUrl,
+    shadowUrl: markerShadowUrl
+  });
   map = L.map(container).setView([11.2447, 125.0033], 13); // Default to Tacloban City
 
   // Add OSM tile layer
@@ -97,11 +106,17 @@ export async function initializeMap(containerId: string): Promise<Leaflet.Map> {
 /**
  * Add a hazard marker to the map with full Z.AI pin styling
  */
-export function addHazardMarker(hazard: Hazard, selectedHazardId: string | null): Leaflet.Marker | null {
+export function addHazardMarker(
+  hazard: Hazard,
+  selectedHazardId: string | null,
+  onSelect?: (hazard: Hazard) => void
+): Leaflet.Marker | null {
   const L = leaflet;
   if (!L || !map || !hazardLayer) return null;
 
-  const [lng, lat] = hazard.location;
+  const coordinates = normalizeHazardLocation(hazard.location);
+  if (!coordinates) return null;
+  const [lng, lat] = coordinates;
   const marker = L.marker([lat, lng], {
     title: `${hazard.hazard_type} - ${hazard.status}`
   });
@@ -149,7 +164,10 @@ export function addHazardMarker(hazard: Hazard, selectedHazardId: string | null)
     .replace(/>/g, '&gt;');
   const photoUrlHtml = safePhotoUrl ? `<br/><img src="${escapedPhotoUrl}" style="max-width: 200px; border-radius: var(--r-m);">` : '';
 
-  marker.bindPopup(`
+  if (onSelect) {
+    marker.on('click', () => onSelect(hazard));
+  } else {
+    marker.bindPopup(`
     <div class="hazard-popup-content">
       <div class="hazard-popup-type">${escapedHazardType}</div>
       <div class="hazard-popup-time">${new Date(hazard.created_at).toLocaleString()}</div>
@@ -157,10 +175,11 @@ export function addHazardMarker(hazard: Hazard, selectedHazardId: string | null)
       ${hazard.description ? `<div class="hazard-popup-description">${escapeHtml(hazard.description)}</div>` : ''}
       ${photoUrlHtml}
     </div>
-  `, {
-    className: 'hazard-popup',
-    keepInView: true
-  });
+    `, {
+      className: 'hazard-popup',
+      keepInView: true
+    });
+  }
 
   hazardLayer.addLayer(marker);
   return marker;
@@ -293,7 +312,11 @@ export function clearHazardMarkers(): void {
  * @param selectedHazardId ID of hazard to highlight (optional)
  * @param filters Optional filters to apply (status, etc.)
  */
-export async function loadHazards(selectedHazardId: string | null, filters: { status?: string } = {}): Promise<void> {
+export async function loadHazards(
+  selectedHazardId: string | null,
+  filters: { status?: string } = {},
+  onSelect?: (hazard: Hazard) => void
+): Promise<void> {
   if (!map || !hazardLayer) return;
 
   clearHazardMarkers();
@@ -317,7 +340,7 @@ export async function loadHazards(selectedHazardId: string | null, filters: { st
   }
 
   (data as Hazard[]).forEach(hazard => {
-    addHazardMarker(hazard, selectedHazardId);
+    addHazardMarker(hazard, selectedHazardId, onSelect);
   });
 }
 
@@ -427,14 +450,18 @@ export function addAdvisoryMarker(advisory: AgencyAdvisory): Leaflet.Marker | nu
 /**
  * Subscribe to real-time hazard updates
  */
-export function subscribeToHazardChanges(onHazardsUpdated?: () => void, onVerificationNeeded?: (hazard: any) => void): void {
+export function subscribeToHazardChanges(
+  onHazardsUpdated?: () => void,
+  onVerificationNeeded?: (hazard: any) => void,
+  onHazardSelected?: (hazard: Hazard) => void
+): void {
   supabase
     .channel('hazards-changes')
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'hazards' },
       (payload) => {
-        loadHazards(null); // Reload all hazards on change
+        loadHazards(null, {}, onHazardSelected);
         if (onHazardsUpdated) {
           onHazardsUpdated();
         }

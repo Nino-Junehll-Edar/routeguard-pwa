@@ -53,16 +53,20 @@ self.addEventListener('fetch', (event) => {
       const response = await fetch(request);
       if (response.ok) {
         const cache = await caches.open(assetCache);
-        await cache.put(request, response.clone());
+        await cache.put(request, response.clone()).catch(() => {});
       }
       return response;
     } catch (error) {
-      const cached = await caches.match(request);
+      const cached = await caches.match(request).catch(() => undefined);
       if (cached) return cached;
       if (request.mode === 'navigate') {
-        return (await caches.match('/')) || Response.error();
+        const offlinePage = await caches.match('/offline.html').catch(() => undefined);
+        return offlinePage || new Response('RouteGuard is offline.', {
+          status: 503,
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+        });
       }
-      throw error;
+      return new Response(null, { status: 503, statusText: 'Service Unavailable' });
     }
   })());
 });

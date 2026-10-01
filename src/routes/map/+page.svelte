@@ -1,5 +1,5 @@
 ﻿<script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { loadHazards, loadAdvisories, initializeMap, subscribeToHazardChanges, subscribeToAdvisoryChanges, updateUserPosition, displayRoute, clearRoute, clearAdvisoryMarkers, clearHazardMarkers } from '$lib/mapUtils';
   import { user } from '$lib/authStore';
   import { supabase } from '$lib/supabaseClient';
@@ -10,7 +10,9 @@
   import { getNode } from '$lib/routing/osmLoader';
   import HazardComments from '$lib/components/HazardComments.svelte';
   import VoteButton from '$lib/components/VoteButton.svelte';
+  import HazardDetailSheet from '$lib/components/HazardDetailSheet.svelte';
   import { get } from 'svelte/store';
+  import { normalizeHazardLocation } from '$lib/geoUtils';
       import notificationsStore from '$lib/stores/notifications.js';
   import type { RoutePoint, RouteResult } from '$lib/types/routing';
   import type { Hazard } from '$lib/types/hazard';
@@ -28,6 +30,7 @@
 
   let mapContainer: HTMLDivElement | null = null;
   let userMarker: any = null;
+  let detailHazard: Hazard | null = null;
 
   // UI state
   const showErrorBanner = writable(false);
@@ -72,7 +75,10 @@
   let systemTimeInterval: ReturnType<typeof setInterval> | null = null;
 
   // Initialize map when component mounts
-  onMount(async () => {
+  onMount(() => {
+    let cleanup = () => {};
+
+    void (async () => {
     if (!mapContainer) return;
 
     // Set up online/offline detection
@@ -126,7 +132,9 @@
         async (hazard) => {
           // Automatically show verification card when hazard needs verification
           // Extract coordinates from PostGIS point (format: [lng, lat])
-          const [lng, lat] = hazard.location || [0, 0];
+          const coordinates = normalizeHazardLocation(hazard.location);
+          if (!coordinates) return;
+          const [lng, lat] = coordinates;
 
           // Format the data for the verification card
           const verificationData = {
@@ -143,7 +151,8 @@
 
           // Also send verification prompt notification
           await sendVerificationPrompt(hazard.id, hazard.hazard_type);
-        }
+        },
+        openHazardDetails
       );
 
       // Load initial advisories
@@ -239,21 +248,23 @@
         // For now, we'll just update every 2 minutes to be safe
       }, 2 * 60 * 1000); // 2 minutes
 
-      // Cleanup on destroy
-      onDestroy(() => {
+      cleanup = () => {
         navigator.geolocation.clearWatch(watchId);
         window.removeEventListener('online', updateOnlineStatus);
         window.removeEventListener('offline', updateOnlineStatus);
         clearInterval(proximityCheckInterval);
-                if (systemTimeInterval) clearInterval(systemTimeInterval);
+        if (systemTimeInterval) clearInterval(systemTimeInterval);
         clearInterval(notificationUpdateInterval);
         selectedHazardSubscription();
         notificationSubscription();
-      });
+      };
     } catch (error) {
       console.error('Map initialization error:', error);
       setErrorBanner(true, 'Failed to initialize map');
     }
+    })();
+
+    return () => cleanup();
   });
 
   // Helper functions
@@ -336,7 +347,9 @@
 
       if (data) {
         // Extract coordinates from PostGIS point (format: [lng, lat])
-        const [lng, lat] = data.location || [0, 0];
+        const coordinates = normalizeHazardLocation(data.location);
+        if (!coordinates) return;
+        const [lng, lat] = coordinates;
 
         // Format the data for the verification card
         const verificationData = {
@@ -380,18 +393,18 @@
     switch (activeChip.id) {
       case 'all':
         // Show all hazards (non-expired) and advisories
-        await loadHazards($selectedHazardId);
+        await loadHazards($selectedHazardId, {}, openHazardDetails);
         await loadAdvisories();
         break;
       case 'nearby':
         // TODO: Implement nearby filtering (would need user location)
         // For now, show all hazards and advisories
-        await loadHazards($selectedHazardId);
+        await loadHazards($selectedHazardId, {}, openHazardDetails);
         await loadAdvisories();
         break;
       case 'verify':
         // Show only hazards that need verification
-        await loadHazards($selectedHazardId, { status: 'needs_verification' });
+        await loadHazards($selectedHazardId, { status: 'needs_verification' }, openHazardDetails);
         await loadAdvisories();
         break;
       case 'adv':
@@ -399,13 +412,17 @@
         await loadAdvisories();
         break;
       default:
-        await loadHazards($selectedHazardId);
+        await loadHazards($selectedHazardId, {}, openHazardDetails);
         await loadAdvisories();
     }
   }
 
-    async function verifyHazard(verificationType: string) {
-    const hazardId = $selectedHazardId;
+  function openHazardDetails(hazard: Hazard) {
+    detailHazard = hazard;
+  }
+
+  async function verifyHazard(verificationType: string, targetHazardId: string | null = $selectedHazardId) {
+    const hazardId = targetHazardId;
     if (!hazardId) return;
 
     try {
@@ -413,8 +430,7 @@
       const { error } = await supabase
         .rpc('verify_hazard', {
           p_hazard_id: hazardId,
-          p_verification_type: verificationType,
-          p_user_id: $user?.id // Add user ID parameter
+          p_verification_type: verificationType
         });
 
       if (error) {
@@ -423,6 +439,7 @@
 
       // Close the verification card after successful verification
       closeVerificationCard();
+      detailHazard = null;
 
       // Optionally, you could show a toast notification here
       // For now, we'll just close the card and let the UI update via real-time updates
@@ -712,15 +729,15 @@
           <div class="divider"></div>
           <div>
             <label>
-              <input type="checkbox" checked on:change={() => {/* Toggle hazard layer */}}>
+              <input type="checkbox" checked on:change={() => { /* Toggle hazard layer */ }}>
               <span>Hazard Points</span>
             </label>
             <label>
-              <input type="checkbox" checked on:change={() => {/* Toggle official advisories */}}>
+              <input type="checkbox" checked on:change={() => { /* Toggle official advisories */ }}>
               <span>Official Advisories</span>
             </label>
             <label>
-              <input type="checkbox" on:change={() => {/* Toggle satellite imagery */}}>
+              <input type="checkbox" on:change={() => { /* Toggle satellite imagery */ }}>
               <span>Satellite View</span>
             </label>
           </div>
@@ -791,6 +808,12 @@
     </div>
   </div>
 </div>
+
+<HazardDetailSheet
+  hazard={detailHazard}
+  on:close={() => detailHazard = null}
+  on:confirm={(event) => verifyHazard(event.detail.verificationType, event.detail.hazardId)}
+/>
 
 <!-- SR pill (top-right, outside phone view) -->
 <div class="srpill" class:show={$showSrPill}>

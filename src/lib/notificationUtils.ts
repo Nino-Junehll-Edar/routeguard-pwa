@@ -2,6 +2,7 @@ import { supabase } from './supabaseClient';
 import { user } from './authStore';
 import { get } from 'svelte/store';
 import type { Notification } from './types/notification';
+import { normalizeHazardLocation } from './geoUtils';
 import { requestFCMPermission, setupFCMListener, isFCMSupported } from './firebase';
 
 // FCM configuration
@@ -52,7 +53,7 @@ export function showNotification(title: string, options: { body?: string; icon?:
 
   new Notification(title, {
     body: options.body || '',
-    icon: options.icon || '/icon-192x192.png', // Default PWA icon
+    icon: options.icon || '/favicon.svg',
     ...options
   });
 }
@@ -165,7 +166,7 @@ export async function checkProximityAlerts(currentLat: number, currentLng: numbe
     const { data, error } = await supabase
       .from('hazards')
       .select('*')
-      .not('status', 'in', ['expired', 'hazard_cleared'])
+      .not('status', 'in', '(expired,hazard_cleared)')
       .gt('lifetime_minutes', 0)
       .order('created_at', { ascending: false });
 
@@ -176,7 +177,9 @@ export async function checkProximityAlerts(currentLat: number, currentLng: numbe
 
     // Check each hazard for proximity
     for (const hazard of data || []) {
-      const [hazardLng, hazardLat] = hazard.location;
+      const coordinates = normalizeHazardLocation(hazard.location);
+      if (!coordinates) continue;
+      const [hazardLng, hazardLat] = coordinates;
       const distance = haversineDistance(currentLat, currentLng, hazardLat, hazardLng);
 
       // If within 500m and we haven't recently notified about this hazard

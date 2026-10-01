@@ -1,6 +1,6 @@
 import { supabase } from './supabaseClient';
-import { user } from './authStore';
 import { profile } from '$lib/stores/profile';
+import { user } from '$lib/authStore';
 import { get } from 'svelte/store';
 import type { UserProfile } from '$lib/types/profile';
 

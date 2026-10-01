@@ -2,7 +2,8 @@ import { get, writable } from 'svelte/store'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from './supabaseClient'
 import { loadProfile, profile } from './stores/profile'
-import { goto } from '$app/navigation'
+
+export { profile, loadProfile }
 
 const userStore = writable<User | null>(null)
 export const user = Object.assign(userStore, { get: () => get(userStore) })
@@ -61,8 +62,6 @@ export async function initAuth() {
         profile.set(null)
         profileLoading.set(false)
         profileError.set(null)
-        // Redirect to map page on sign out
-        goto('/map')
       }
     })
   } catch (error) {
@@ -72,9 +71,8 @@ export async function initAuth() {
     user.set(null)
     profile.set(null)
   } finally {
-    if (!authListener) {
-      authLoading.set(false)
-    }
+    // Ensure authLoading is set to false when initialization completes
+    authLoading.set(false)
   }
 }
 

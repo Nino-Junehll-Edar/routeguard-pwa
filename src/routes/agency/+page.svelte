@@ -1,636 +1,779 @@
-﻿<script lang="ts">
+<script lang="ts">
   import { onMount } from 'svelte';
   import { supabase } from '$lib/supabaseClient';
   import { user } from '$lib/authStore';
-  import type { AgencyAdvisory } from '$lib/types/hazard';
   import { profile } from '$lib/stores/profile';
   import { get } from 'svelte/store';
   import { goto } from '$app/navigation';
   import { writable } from 'svelte/store';
+  import CommandMapPanel from '$lib/components/CommandMapPanel.svelte';
+  import { normalizeHazardLocation } from '$lib/geoUtils';
 
-  // Stores for advisory data and UI state
-  export const advisories = writable<AgencyAdvisory[]>([]);
-  export const loading = writable<boolean>(true);
-  export const error = writable<string | null>(null);
-  export const creating = writable<boolean>(false);
-  export const createError = writable<string | null>(null);
-  export const createSuccess = writable<string | null>(null);
+  // Types
+  interface HazardStat {
+    count: number;
+    label: string;
+    tone?: 'normal' | 'incoming' | 'verified' | 'cleared';
+  }
 
-  // Form state for creating advisories
-  let title = '';
-  let description = '';
-  let advisoryType = '';
-  let startTime: string | null = null;
-  let endTime: string | null = null;
-  let isActive = true;
+  interface AdvisoryStat {
+    count: number;
+    label: string;
+  }
 
-  // Check authorization on mount
-  onMount(async () => {
-    await checkAuthorization();
-    if ($profile?.role === 'agency_personnel' || $profile?.role === 'admin') {
-      await loadAdvisories();
-    }
-  });
+  interface Hazard {
+    id: string;
+    hazard_type: string;
+    severity: 'passable' | 'one_lane' | 'impassable';
+    status: 'unconfirmed' | 'needs_verification' | 'hazard_active' | 'hazard_cleared' | 'expired';
+    location: [number, number]; // [lng, lat]
+    description: string | null;
+    reporter_id: string | null;
+    created_at: string;
+    updated_at: string;
+  }
 
+  interface Advisory {
+    id: string;
+    title: string;
+    advisory_type: string;
+    description: string | null;
+    geometry: { type: string; coordinates: unknown } | null;
+    start_time: string | null;
+    end_time: string | null;
+    is_active: boolean;
+    created_at: string;
+    updated_at: string;
+  }
+
+  // Stores for data
+  const openHazardsCount = writable<number>(0);
+  const needsVerificationCount = writable<number>(0);
+  const activeAdvisoriesCount = writable<number>(0);
+  const reports24hCount = writable<number>(0);
+  const latestHazards = writable<Hazard[]>([]);
+  const advisoriesList = writable<Advisory[]>([]);
+  const loading = writable<boolean>(true);
+  const error = writable<string | null>(null);
+
+  // Check authorization
   async function checkAuthorization() {
     const currentUser = get(user);
     const profileData = get(profile);
 
     if (!currentUser) {
+      // Not signed in, redirect to login
       goto('/login');
-      return;
+      return false;
     }
 
-    // Wait for profile to load if needed
+    // Wait for profile to load if not already loaded
     if (!profileData) {
-      // Profile will be loaded via authStore listener
+      // Profile will be loaded via authStore listener, we'll check again in a moment
       // For now, we'll assume not authorized until profile loads
-      return;
+      return false;
     }
 
     // Check if user is agency personnel or admin
-    if (profileData && (profileData.role === 'agency_personnel' || profileData.role === 'admin')) {
-      // Authorized
-      return;
+    if (profileData.role === 'agency_personnel' || profileData.role === 'admin') {
+      return true;
     }
 
-    // Not authorized, redirect to map
+    // Not authorized, redirect to a safe default page
     goto('/map');
+    return false;
   }
 
-  async function loadAdvisories() {
-    loading.set(true);
-    error.set(null);
-
+  // Load stats
+  async function loadStats() {
     try {
-      const { data, error: err } = await supabase
+      // Open hazards (NOT IN (hazard_cleared, expired))
+      const { count: openHazardsCountValue, error: openHazardsError } = await supabase
+        .from('hazards')
+        .select('id', { count: 'exact', head: true })
+        .not('status', 'in', '(hazard_cleared,expired)');
+
+      if (openHazardsError) throw openHazardsError;
+      openHazardsCount.set(openHazardsCountValue ?? 0);
+
+      // Needs verification (status = needs_verification)
+      const { count: needsVerificationCountValue, error: needsVerificationError } = await supabase
+        .from('hazards')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'needs_verification');
+
+      if (needsVerificationError) throw needsVerificationError;
+      needsVerificationCount.set(needsVerificationCountValue ?? 0);
+
+      // Active advisories (is_active = true)
+      const { count: activeAdvisoriesCountValue, error: activeAdvisoriesError } = await supabase
+        .from('agency_advisories')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_active', true);
+
+      if (activeAdvisoriesError) throw activeAdvisoriesError;
+      activeAdvisoriesCount.set(activeAdvisoriesCountValue ?? 0);
+
+      // Reports in last 24 hours
+      const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count: reports24hCountValue, error: reports24hError } = await supabase
+        .from('hazards')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', twentyFourHoursAgo);
+
+      if (reports24hError) throw reports24hError;
+      reports24hCount.set(reports24hCountValue ?? 0);
+    } catch (err) {
+      console.error('Error loading stats:', err);
+      error.set('Failed to load dashboard data. Please try again.');
+    }
+  }
+
+  // Load latest hazards (6 newest first)
+  async function loadLatestHazards() {
+    try {
+      const { data, error } = await supabase
+        .from('hazards')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(6);
+
+      if (error) throw error;
+      latestHazards.set(data as Hazard[]);
+    } catch (err) {
+      console.error('Error loading latest hazards:', err);
+      error.set('Failed to load latest hazards.');
+    }
+  }
+
+  // Load advisories list
+  async function loadAdvisories() {
+    try {
+      const { data, error } = await supabase
         .from('agency_advisories')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (err) throw err;
-
-      advisories.set(data || []);
+      if (error) throw error;
+      advisoriesList.set(data as Advisory[]);
     } catch (err) {
       console.error('Error loading advisories:', err);
-      error.set(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      loading.set(false);
+      error.set('Failed to load advisories.');
     }
   }
 
-  async function createAdvisory() {
-    // Validate form
-    if (!title || !advisoryType) {
-      createError.set('Please fill in all required fields');
-      return;
-    }
+  // Format time ago
+  function formatTimeAgo(dateString: string): string {
+    const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+    const units = [
+      { value: 31536000, label: 'year' },
+      { value: 2592000, label: 'month' },
+      { value: 86400, label: 'day' },
+      { value: 3600, label: 'hour' },
+      { value: 60, label: 'minute' }
+    ];
 
-    // Validate time range
-    if (startTime && endTime && new Date(startTime) > new Date(endTime)) {
-      createError.set('End time must be after start time');
-      return;
-    }
-
-    creating.set(true);
-    createError.set(null);
-    createSuccess.set(null);
-
-    try {
-      const currentUser = get(user);
-      if (!currentUser) {
-        throw new Error('User not authenticated');
+    for (const unit of units) {
+      const amount = Math.floor(seconds / unit.value);
+      if (amount >= 1) {
+        return `${amount} ${unit.label}${amount === 1 ? '' : 's'} ago`;
       }
+    }
 
-      const profileData = get(profile);
-      if (!profileData || !(profileData.role === 'agency_personnel' || profileData.role === 'admin')) {
-        throw new Error('Unauthorized');
-      }
+    return `${Math.max(0, Math.floor(seconds))} seconds ago`;
+  }
 
-      // Create a default Point geometry for the advisory
-      // Using Tacloban City coordinates as default (same as map initialization)
-      // In a full implementation, this would be replaced with user-selected coordinates
-      const defaultLatitude = 11.2447;
-      const defaultLongitude = 125.0033;
-      const geometry = {
-        type: 'Point',
-        coordinates: [defaultLongitude, defaultLatitude]
-      };
-
-      // Create advisory
-      const { data, error: err } = await supabase
-        .from('agency_advisories')
-        .insert({
-          created_by: currentUser.id,
-          title,
-          description: description || null,
-          advisory_type: advisoryType,
-          geometry: geometry,
-          start_time: startTime || null,
-          end_time: endTime || null,
-          is_active: isActive
-        });
-
-      if (err) throw err;
-
-      createSuccess.set('Advisory created successfully!');
-
-      // Reset form
-      title = '';
-      description = '';
-      advisoryType = '';
-      startTime = null;
-      endTime = null;
-      isActive = true;
-
-      // Reload advisories
-      await loadAdvisories();
-    } catch (err) {
-      console.error('Error creating advisory:', err);
-      createError.set(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      creating.set(false);
+  // Get hazard status chip class and label
+  function getHazardStatusInfo(status: Hazard['status']) {
+    switch (status) {
+      case 'unconfirmed':
+        return { class: 'status-unconfirmed', label: 'Unconfirmed' };
+      case 'needs_verification':
+        return { class: 'status-needs-verification', label: 'Needs Verification' };
+      case 'hazard_active':
+        return { class: 'status-active', label: 'Active' };
+      case 'hazard_cleared':
+        return { class: 'status-cleared', label: 'Cleared' };
+      case 'expired':
+        return { class: 'status-expired', label: 'Expired' };
+      default:
+        return { class: 'status-unknown', label: 'Unknown' };
     }
   }
 
-  async function toggleAdvisoryStatus(id: string, currentStatus: boolean) {
-    try {
-      const { error: err } = await supabase
-        .from('agency_advisories')
-        .update({ is_active: !currentStatus })
-        .eq('id', id);
-
-      if (err) throw err;
-
-      // Update local store
-      advisories.update(items =>
-        items.map(item =>
-          item.id === id ? { ...item, is_active: !currentStatus } : item
-        )
-      );
-    } catch (err) {
-      console.error('Error updating advisory status:', err);
-      error.set(err instanceof Error ? err.message : 'Unknown error');
+  // Get hazard severity chip class and label
+  function getHazardSeverityInfo(severity: Hazard['severity']) {
+    switch (severity) {
+      case 'passable':
+        return { class: 'severity-passable', label: 'Passable' };
+      case 'one_lane':
+        return { class: 'severity-one-lane', label: 'One lane' };
+      case 'impassable':
+        return { class: 'severity-impassable', label: 'Impassable' };
+      default:
+        return { class: 'severity-unknown', label: 'Unknown' };
     }
   }
 
-  async function deleteAdvisory(id: string) {
-    if (!confirm('Are you sure you want to delete this advisory?')) return;
+  // Get hazard type display name and icon
+  function getHazardTypeInfo(type: string) {
+    const typeMap: Record<string, { name: string; icon: string }> = {
+      flood: { name: 'Flooding', icon: 'water_drop' },
+      pothole: { name: 'Pothole', icon: 'circle' },
+      accident: { name: 'Accident', icon: 'car_crash' },
+      obstruction: { name: 'Obstruction', icon: 'construction' },
+      landslide: { name: 'Landslide', icon: 'terrain' },
+      tree: { name: 'Fallen Tree', icon: 'forest' },
+      collapse: { name: 'Road Collapse', icon: 'warning' },
+      other: { name: 'Other', icon: 'help_outline' }
+    };
 
-    try {
-      const { error: err } = await supabase
-        .from('agency_advisories')
-        .delete()
-        .eq('id', id);
-
-      if (err) throw err;
-
-      // Remove from local store
-      advisories.update(items => items.filter(item => item.id !== id));
-    } catch (err) {
-      console.error('Error deleting advisory:', err);
-      error.set(err instanceof Error ? err.message : 'Unknown error');
-    }
+    return typeMap[type] || { name: type, icon: 'help_outline' };
   }
+
+  function formatHazardLocation(location: unknown): string {
+    const coordinates = normalizeHazardLocation(location);
+    if (!coordinates) return 'Location unavailable';
+    const [longitude, latitude] = coordinates;
+    return `Lat: ${latitude.toFixed(4)}, Lng: ${longitude.toFixed(4)}`;
+  }
+
+  // Initialize real-time subscriptions
+  function setupRealtime() {
+    // Hazards changes
+    supabase.channel('hazards-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'hazards' },
+        () => {
+          loadStats();
+          loadLatestHazards();
+        }
+      )
+      .subscribe();
+
+    // Agency advisories changes
+    supabase.channel('advisories-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'agency_advisories' },
+        () => {
+          loadStats();
+          loadAdvisories();
+        }
+      )
+      .subscribe();
+  }
+
+  // Page load
+  onMount(async () => {
+    const authorized = await checkAuthorization();
+    if (!authorized) return;
+
+    await loadStats();
+    await loadLatestHazards();
+    await loadAdvisories();
+    setupRealtime();
+    loading.set(false);
+  });
 </script>
 
-<div class="agency-dashboard">
-  <header class="dashboard-header">
-    <h1>Agency Dashboard</h1>
-    <p class="dashboard-subtitle">Manage agency advisories and alerts</p>
-    <div class="user-info">
-      <span>Logged in as: {$profile?.full_name || 'User'} ({$profile?.role || 'unknown'})</span>
-      <button on:click={() => {
-        import('$lib/authStore').then(({ signOut }) => signOut().catch(console.error));
-      }} class="btn-outline">Sign Out</button>
-    </div>
-  </header>
-
-  {#if $loading}
-    <div class="loading">Loading advisories...</div>
-  {:else if $error}
-    <div class="error">Error: {$error}</div>
-  {/if}
-
-  <section class="advisory-management">
-    <h2>My Advisories</h2>
-
-    {#if $advisories.length === 0}
-      <p class="empty-state">No advisories created yet. Create your first advisory below.</p>
-      {:else}
-      <div class="advisories-list">
-        {#each $advisories as advisory}
-          <div class="advisory-card">
-            <div class="advisory-header">
-              <h3>{advisory.title}</h3>
-              <div class="advisory-meta">
-                <span class="advisory-type">{advisory.advisory_type}</span>
-                <span class="advisory-status" class:inactive={!advisory.is_active}>{advisory.is_active ? 'Active' : 'Inactive'}</span>
-                <span class="advisory-date">{new Date(advisory.created_at).toLocaleDateString()}</span>
-              </div>
-            </div>
-            {#if advisory.description}
-              <p class="advisory-description">{advisory.description}</p>
-            {/if}
-            {#if advisory.start_time || advisory.end_time}
-              <div class="advisory-timing">
-                {#if advisory.start_time}
-                  <span>Starts: {new Date(advisory.start_time).toLocaleString()}</span>
-                {/if}
-                {#if advisory.end_time}
-                  <span>Ends: {new Date(advisory.end_time).toLocaleString()}</span>
-                {/if}
-              </div>
-            {/if}
-            <div class="advisory-actions">
-              <button
-                on:click={() => toggleAdvisoryStatus(advisory.id, advisory.is_active)}
-                class="btn-sm btn-{advisory.is_active ? 'danger' : 'success'}"
-              >
-                {advisory.is_active ? 'Deactivate' : 'Activate'}
-              </button>
-              <button
-                on:click={() => deleteAdvisory(advisory.id)}
-                class="btn-sm btn-danger"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        {/each}
+{#if $loading}
+  <div class="loading-overlay">
+    <div class="loading-spinner"></div>
+    <p>Loading dashboard...</p>
+  </div>
+{:else if $error}
+  <div class="error-banner">{$error}</div>
+{:else}
+  <div class="agency-console">
+    <header class="console-header">
+      <div class="user-greeting">
+        <h1>Good day, {$profile?.full_name || 'User'}</h1>
+        <p class="console-subtitle">Community hazards awaiting official action, and your published advisories.</p>
+        <span class="verified-badge">LGU verified account</span>
       </div>
-    {/if}
+    </header>
 
-    <div class="advisory-form-section">
-      <h2>Create New Advisory</h2>
-
-      {#if $createError}
-        <div class="error">{$createError}</div>
-      {/if}
-      {#if $createSuccess}
-        <div class="success">{$createSuccess}</div>
-      {/if}
-
-      <form on:submit|preventDefault={createAdvisory} class="advisory-form">
-        <div class="form-group">
-          <label for="advisory-title">Title:</label>
-          <input
-            type="text"
-            id="advisory-title"
-            bind:value={title}
-            required
-            class="input"
-          />
+    <section class="stats-section">
+      <div class="stats-grid">
+        <!-- Open hazards card -->
+        <div class="stat-card">
+          <div class="stat-value">{$openHazardsCount}</div>
+          <div class="stat-label">Open hazards</div>
         </div>
 
-        <div class="form-group">
-          <label for="advisory-description">Description:</label>
-          <textarea
-            id="advisory-description"
-            bind:value={description}
-            rows="3"
-            class="input"
-          ></textarea>
+        <!-- Needs verification card -->
+        <div class="stat-card">
+          <div class="stat-value status-{$needsVerificationCount > 0 ? 'needs-verification' : 'verified'}">
+            {$needsVerificationCount}
+          </div>
+          <div class="stat-label">Needs verification</div>
         </div>
 
-        <div class="form-group">
-          <label for="advisory-type">Advisory Type:</label>
-          <select
-            id="advisory-type"
-            bind:value={advisoryType}
-            required
-            class="select"
-          >
-            <option value="">Select advisory type</option>
-            <option value="weather">Weather Advisory</option>
-            <option value="traffic">Traffic Advisory</option>
-            <option value="construction">Construction Advisory</option>
-            <option value="emergency">Emergency Advisory</option>
-            <option value="public_safety">Public Safety Advisory</option>
-            <option value="health">Health Advisory</option>
-            <option value="other">Other</option>
-          </select>
+        <!-- Active advisories card -->
+        <div class="stat-card">
+          <div class="stat-value">{$activeAdvisoriesCount}</div>
+          <div class="stat-label">Active advisories</div>
         </div>
 
-        <div class="form-group">
-          <label for="advisory-start-time">Start Time:</label>
-          <input
-            type="datetime-local"
-            id="advisory-start-time"
-            bind:value={startTime}
-            class="input"
-          />
+        <!-- Reports 24h card -->
+        <div class="stat-card">
+          <div class="stat-value tone-{$reports24hCount > 0 ? 'incoming' : 'normal'}">
+            {$reports24hCount}
+          </div>
+          <div class="stat-label">Reports · 24 h</div>
         </div>
+      </div>
+    </section>
 
-        <div class="form-group">
-          <label for="advisory-end-time">End Time:</label>
-          <input
-            type="datetime-local"
-            id="advisory-end-time"
-            bind:value={endTime}
-            class="input"
-          />
-        </div>
+    <CommandMapPanel />
 
-        <div class="form-group">
-          <label class="checkbox-label">
-            <input
-              type="checkbox"
-              bind:checked={isActive}
-            />
-            Is Active
-          </label>
-        </div>
+    <section class="lists-section">
+      <div class="latest-hazards" id="hazard-review">
+        <h2>Latest hazards</h2>
+        {#if $latestHazards.length === 0}
+          <div class="empty-state">No hazards reported yet.</div>
+        {:else}
+          <ul class="hazards-list">
+            {#each $latestHazards as hazard}
+              <li class="hazard-item">
+                <div class="hazard-info">
+                  <div class="hazard-tag">
+                    <span class="tag-chip">{getHazardTypeInfo(hazard.hazard_type).name}</span>
+                  </div>
+                  <div class="hazard-street">
+                    <!-- In a real app, we'd reverse geocode to get street name -->
+                    <!-- For now, showing coordinates -->
+                    {formatHazardLocation(hazard.location)}
+                  </div>
+                </div>
+                <div class="hazard-meta">
+                  <span class="time-ago">{formatTimeAgo(hazard.created_at)}</span>
+                  <span class="status-chip status-{getHazardStatusInfo(hazard.status).class.split('-')[1]}">{getHazardStatusInfo(hazard.status).label}</span>
+                </div>
+              </li>
+            {/each}
+          </ul>
+          <div class="footer-link">
+            <a href="/agency#hazard-review" data-sveltekit-reload>Open review queue →</a>
+          </div>
+        {/if}
+      </div>
 
-        <button
-          type="submit"
-          disabled={$creating}
-          class="btn-primary"
-        >
-          {#if $creating}
-            Creating...
-          {:else}
-            Create Advisory
-          {/if}
-        </button>
-      </form>
-    </div>
-  </section>
-</div>
+      <div class="advisories-list" id="advisories">
+        <h2>Advisories</h2>
+        {#if $advisoriesList.length === 0}
+          <div class="empty-state">You haven't published advisories yet.</div>
+        {:else}
+          <ul class="advisories">
+            {#each $advisoriesList as advisory}
+              <li class="advisory-item">
+                <div class="advisory-info">
+                  <div class="advisory-title">{advisory.title}</div>
+                  <div class="advisory-meta">
+                    <span class="advisory-type">{advisory.advisory_type}</span>
+                    <span class="advisory-window">
+                      {#if advisory.start_time && advisory.end_time}
+                        {new Date(advisory.start_time).toLocaleDateString()} – {new Date(advisory.end_time).toLocaleDateString()}
+                      {:else if advisory.start_time}
+                        From {new Date(advisory.start_time).toLocaleDateString()}
+                      {:else if advisory.end_time}
+                        Until {new Date(advisory.end_time).toLocaleDateString()}
+                      {:else}
+                        Open-ended
+                      {/if}
+                    </span>
+                  </div>
+                </div>
+                <div class="advisory-status">
+                  {#if advisory.is_active}
+                    <span class="status-chip status-active">Active</span>
+                  {:else}
+                    <span class="status-chip status-inactive">Inactive</span>
+                  {/if}
+                </div>
+              </li>
+            {/each}
+          </ul>
+          <div class="footer-link">
+            <a href="/agency#advisories" data-sveltekit-reload>Manage advisories →</a>
+          </div>
+        {/if}
+      </div>
+    </section>
+  </div>
+{/if}
 
 <style>
-  .agency-dashboard {
+  .agency-console {
     max-width: 1200px;
     margin: 0 auto;
     padding: 20px;
+    background: var(--background);
+    min-height: 100vh;
   }
 
-  .dashboard-header {
+  .console-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 30px;
+    align-items: center;
+    margin-bottom: 24px;
     flex-wrap: wrap;
-    gap: 20px;
+    gap: 16px;
   }
 
-  .dashboard-header h1 {
-    margin: 0 0 10px 0;
-    font-size: 2rem;
+  .user-greeting h1 {
+    margin: 0 0 8px 0;
+    font-size: 1.5rem;
+    color: var(--primary-ink);
   }
 
-  .dashboard-subtitle {
-    color: #666;
+  .console-subtitle {
+    margin: 0 0 12px 0;
+    color: var(--ink2);
+    font-size: 1rem;
+  }
+
+  .verified-badge {
+    background: var(--primary-surface);
+    color: var(--primary);
+    padding: 4px 12px;
+    border-radius: var(--r-s);
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: 1px solid var(--primary);
+  }
+
+  .stats-section {
+    margin-bottom: 24px;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-m);
+    padding: 20px;
+    text-align: center;
+    transition: all 0.2s ease;
+  }
+
+  .stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+
+  .stat-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    line-height: 1;
+  }
+
+  .stat-value.needs-verification {
+    color: var(--danger);
+  }
+
+  .stat-value.verified {
+    color: var(--success);
+  }
+
+  .stat-value.incoming {
+    color: var(--warning);
+  }
+
+  .stat-label {
+    font-size: 0.875rem;
+    color: var(--ink2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .lists-section {
+    display: grid;
+    gap: 24px;
+  }
+
+  .latest-hazards, .advisories-list {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-m);
+    overflow: hidden;
+  }
+
+  .latest-hazards h2, .advisories-list h2 {
     margin: 0;
-    font-size: 1.1rem;
+    padding: 16px 20px;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--primary-ink);
+    border-bottom: 1px solid var(--border);
   }
 
-  .user-info {
+  .hazards-list, .advisories {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .hazard-item, .advisory-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .hazard-item:last-child, .advisory-item:last-child {
+    border-bottom: none;
+  }
+
+  .hazard-info {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
-    gap: 10px;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
   }
 
-  .advisory-management {
-    background: white;
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  .hazard-tag .tag-chip {
+    background: var(--primary-surface);
+    color: var(--primary);
+    padding: 2px 8px;
+    border-radius: var(--r-s);
+    font-size: 0.75rem;
+    font-weight: 600;
   }
 
-  .advisory-management h2 {
-    margin-top: 0;
-    color: #333;
+  .hazard-street {
+    font-size: 0.875rem;
+    color: var(--ink2);
   }
 
-  .empty-state {
-    text-align: center;
-    color: #666;
-    padding: 40px 20px;
+  .hazard-meta {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 0.875rem;
+    color: var(--ink2);
   }
 
-  .advisories-list {
-    display: grid;
-    gap: 16px;
-    margin-bottom: 30px;
+  .time-ago {
+    font-family: var(--f);
   }
 
-  .advisory-card {
-    border: 1px solid #eee;
-    border-radius: 8px;
-    padding: 16px;
-    background: #fafafa;
+  .status-chip {
+    padding: 2px 8px;
+    border-radius: var(--r-s);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: capitalize;
   }
 
-  .advisory-header {
+  .status-chip.unconfirmed {
+    background: var(--slate-surface);
+    color: var(--slate);
+  }
+
+  .status-chip.needs-verification {
+    background: var(--warning-surface);
+    color: var(--warning);
+  }
+
+  .status-chip.active {
+    background: var(--danger-surface);
+    color: var(--danger);
+  }
+
+  .status-chip.cleared {
+    background: var(--success-surface);
+    color: var(--success);
+  }
+
+  .status-chip.expired {
+    background: var(--surface);
+    color: var(--ink2);
+  }
+
+  .advisory-item {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
-    gap: 10px;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
   }
 
-  .advisory-header h3 {
-    margin: 0 0 8px 0;
-    font-size: 1.25rem;
-    color: #333;
+  .advisory-item:last-child {
+    border-bottom: none;
+  }
+
+  .advisory-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .advisory-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--primary-ink);
+    line-height: 1.3;
   }
 
   .advisory-meta {
     display: flex;
     gap: 12px;
-    flex-wrap: wrap;
-  }
-
-  .advisory-type, .advisory-status, .advisory-date {
+    align-items: center;
     font-size: 0.875rem;
-    padding: 4px 8px;
-    border-radius: 4px;
+    color: var(--ink2);
   }
 
   .advisory-type {
-    background: #e3f2fd;
-    color: #1976d2;
+    text-transform: capitalize;
+  }
+
+  .advisory-window {
+    font-family: var(--f);
   }
 
   .advisory-status {
-    background: #e8f5e9;
-    color: #2e7d32;
-  }
-
-  .advisory-status.inactive {
-    background: #ffebee;
-    color: #c62828;
-  }
-
-  .advisory-date {
-    background: #f5f5f5;
-    color: #666;
-  }
-
-  .advisory-description {
-    margin: 12px 0;
-    color: #555;
-    line-height: 1.5;
-  }
-
-  .advisory-timing {
-    display: flex;
-    gap: 16px;
-    font-size: 0.875rem;
-    color: #666;
-    margin: 12px 0;
-  }
-
-  .advisory-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 16px;
-    flex-wrap: wrap;
-  }
-
-  .advisory-form {
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 20px;
-    border: 1px solid #eee;
-  }
-
-  
-
-  .form-group {
-    margin-bottom: 16px;
-  }
-
-  .form-group label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 500;
-  }
-
-  .input, .select, textarea {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 0.9rem;
-  }
-
-  .input:focus, .select:focus, textarea:focus {
-    outline: none;
-    border-color: #1976d2;
-    box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.2);
-  }
-
-  textarea {
-    resize: vertical;
-    min-height: 80px;
-  }
-
-  .checkbox-label {
     display: flex;
     align-items: center;
-    cursor: pointer;
-    user-select: none;
+    gap: 8px;
   }
 
-  .checkbox-label input {
-    margin-right: 8px;
-    width: auto;
+  .footer-link {
+    display: flex;
+    justify-content: flex-end;
+    padding: 16px 20px;
+    font-size: 0.875rem;
+    color: var(--primary);
   }
 
-  button {
-    cursor: pointer;
-    border: none;
-    padding: 10px 16px;
-    border-radius: 4px;
-    font-size: 0.9rem;
-    font-weight: 500;
-    transition: background-color 0.2s;
+  .footer-link a:hover {
+    text-decoration: underline;
   }
 
-  button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--ink2);
   }
 
-  .btn-primary {
-    background: #1976d2;
-    color: white;
+  .loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,0.9);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
   }
 
-  .btn-primary:hover:not(:disabled) {
-    background: #1565c0;
-  }
-
-  .btn-success {
-    background: #4caf50;
-    color: white;
-  }
-
-  .btn-success:hover {
-    background: #43a047;
-  }
-
-  .btn-danger {
-    background: #f44336;
-    color: white;
-  }
-
-  .btn-danger:hover {
-    background: #d32f2f;
-  }
-
-  .btn-outline {
-    background: transparent;
-    border: 1px solid #ccc;
-    color: #666;
-  }
-
-  .btn-outline:hover {
-    border-color: #999;
-    color: #333;
-  }
-
-  .error {
-    background: #ffebee;
-    color: #c62828;
-    padding: 12px;
-    border-radius: 4px;
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
     margin-bottom: 16px;
   }
 
-  .success {
-    background: #e8f5e9;
-    color: #2e7d32;
-    padding: 12px;
-    border-radius: 4px;
-    margin-bottom: 16px;
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .error-banner {
+    background: var(--danger-surface);
+    color: var(--danger);
+    padding: 12px 16px;
+    border-radius: var(--r-s);
+    margin-bottom: 20px;
+    font-size: 0.875rem;
+  }
+
+  /* Dark mode adjustments */
+  [data-theme=dark] .stat-card {
+    background: var(--surface);
+    border-color: var(--border);
+  }
+
+  [data-theme=dark] .hazard-item,
+  [data-theme=dark] .advisory-item {
+    border-color: var(--border);
+  }
+
+  [data-theme=dark] .footer-link {
+    color: var(--primary);
+  }
+
+  [data-theme=dark] .footer-link a:hover {
+    text-decoration: underline;
   }
 
   /* Responsive design */
   @media (max-width: 768px) {
-    .dashboard-header {
+    .agency-console {
+      padding: 16px;
+    }
+
+    .console-header {
       flex-direction: column;
       align-items: stretch;
     }
 
-    .user-info {
-      align-items: stretch;
+    .user-greeting {
+      text-align: center;
     }
 
-    .advisory-header {
+    .verified-badge {
+      align-self: center;
+    }
+
+    .lists-section {
+      grid-template-columns: 1fr;
+    }
+
+    .stats-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .stat-value {
+      font-size: 2rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .stats-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .hazard-item, .advisory-item {
       flex-direction: column;
-      align-items: stretch;
+      align-items: flex-start;
+      gap: 12px;
     }
 
-    .advisory-actions {
+    .hazard-meta, .advisory-meta, .advisory-status {
+      align-self: flex-start;
+    }
+
+    .footer-link {
       justify-content: center;
+      margin-top: 16px;
     }
   }
 </style>
-
-
-

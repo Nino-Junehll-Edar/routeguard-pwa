@@ -12,12 +12,12 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID || ''
 };
 
-// Initialize Firebase only if we have a config
+// Firebase Messaging depends on browser APIs, so initialize it only in the browser.
 let app = null;
 let messaging = null;
 
 try {
-  if (firebaseConfig.apiKey) {
+  if (typeof window !== 'undefined' && firebaseConfig.apiKey) {
     app = initializeApp(firebaseConfig);
     messaging = getMessaging(app);
   }

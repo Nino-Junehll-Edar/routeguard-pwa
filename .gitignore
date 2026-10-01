@@ -25,3 +25,24 @@ dist
 # Temporary files
 *.tmp
 *.pid
+
+# Local worktrees
+.worktrees/
+
+# Local build, check, and diagnostic output
+/astar-test-output.txt
+/build-check.txt
+/build-output.txt
+/build-status.txt
+/check*.txt
+/dev_output.txt
+/_check.cjs
+/_dump.cjs
+/vite.config.js.timestamp-*.mjs
+
+research_papers
+
+admin
+agency
+public
+basicTest.js

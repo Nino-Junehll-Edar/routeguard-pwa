@@ -11,7 +11,7 @@ SET public = EXCLUDED.public,
 -- Set up storage policy: allow authenticated users to upload their own files
 -- We'll use a bucket policy that restricts uploads to a folder named after the user's id
 -- However, note that Supabase Storage policies are evaluated per bucket, not per folder.
--- We can use a policy that checks the object name starts with the user's id.
+-- We can use a policy that checks if the object name starts with the user's id followed by '/'.
 
 -- First, allow anyone to read objects (since we set public to true)
 -- Actually, if the bucket is public, then reads are already allowed. But we'll explicitly set policy for clarity.
@@ -30,7 +30,7 @@ WITH CHECK (
   AND auth.role() = 'authenticated'
   -- Object path format: <user_id>/<filename>
   -- We'll store files in a folder named after the user's id
-  AND (storage.folder(name))[1] = auth.uid()::text
+  AND name LIKE (auth.uid()::text || '/%')
 );
 
 -- Create policy for updating own objects
@@ -38,7 +38,7 @@ CREATE POLICY "Users can update their own hazard photos"
 ON storage.objects FOR UPDATE
 USING (
   bucket_id = 'hazard-photos'
-  AND auth.uid() = (storage.folder(name))[1]::uuid
+  AND auth.uid() = (split_part(name, '/', 1))::uuid
 );
 
 -- Create policy for deleting own objects
@@ -46,5 +46,5 @@ CREATE POLICY "Users can delete their own hazard photos"
 ON storage.objects FOR DELETE
 USING (
   bucket_id = 'hazard-photos'
-  AND auth.uid() = (storage.folder(name))[1]::uuid
+  AND auth.uid() = (split_part(name, '/', 1))::uuid
 );
