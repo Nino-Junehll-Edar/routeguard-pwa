@@ -10,6 +10,18 @@ This checklist tracks the progress of implementing the RouteGuard Svelte PWA wit
 - [x] Completed
 - [ ] Blocked
 
+## Latest Verified Update (2026-10-02)
+
+- [x] Added the self-contained RGIcons kit and wired inline SVG hazard, advisory, user-location, and route styling into Leaflet maps.
+- [x] Changed light app/auth/report backgrounds to a cool gray-blue gradient and defined a separate dark gradient token.
+- [x] Removed demo-account buttons from `/auth` and centered the sign-in/sign-up card.
+- [x] Added agency Map and agency/admin Statistics navigation tabs; overview loading now exits to an auth/error state when a staff profile cannot be resolved.
+- [x] Fixed advisory geometry updates to unwrap Leaflet GeoJSON Features before validating coordinates.
+- [x] Added hazard flag submission and moderator action code plus forward migration 014 and a schema mirror.
+- [ ] Apply and validate migrations 013/014 against a reachable Supabase database. The current browser session observed Supabase endpoint timeouts; the moderation table will not exist until migration 014 is applied.
+- [ ] Authenticated visual verification of staff map/statistics, advisory drawing, theme switching, and auth layout.
+- [ ] Implement hard hazard blocking, reliable rerouting from the user's current position, and selectable basemap styles per [the navigation/rerouting/map-layers plan](superpowers/plans/2026-10-02-community-navigation-and-map-layers.md).
+
 ---
 
 ## 🏗️ FOUNDATION & SETUP
@@ -165,7 +177,12 @@ This checklist tracks the progress of implementing the RouteGuard Svelte PWA wit
   - [x] Add web worker support for heavy calculations
   - [x] Implement route visualization on map with polyline
   - [x] Add route instructions/turn-by-turn guidance
-  - [x] Implement route recalculation on hazard changes
+  - [ ] Replace count-based route refresh with geometry/remaining-corridor impact checks and current-position rerouting.
+- [ ] Treat verified active impassable hazards and active official closure advisories as hard blocks; current A* applies soft weights only.
+- [ ] Respect OSM one-way/access tags and use one hazard snapshot for search, route scoring, and explanation.
+- [ ] Replace fixed sample endpoints with user-selected start/destination and active trip state.
+- [ ] Add selectable street, terrain, satellite, and monochrome base maps without losing hazard/advisory/route overlays.
+- [ ] Implement and verify the phases in [the community navigation and map layers plan](superpowers/plans/2026-10-02-community-navigation-and-map-layers.md).
 
 ### Administrative Features
 - [x] Create agency admins table or role-based access
@@ -173,12 +190,12 @@ This checklist tracks the progress of implementing the RouteGuard Svelte PWA wit
 - [x] Implement advisory geometry storage (POINT/LINESTRING/POLYGON)
 - [x] Implement advisory activation/deactivation
 - [x] Implement advisory propagation to hazard map (5-second target)
-- [x] Create moderation queue for disputed hazard reports
-- [x] Implement moderator review and resolution actions
-- [x] Implement audit trail for moderator actions
+- [x] Add hazard flag table/RLS and flag/resolve RPC definitions in migration 014 and schema mirror (not applied to the connected project).
+- [x] Add a community flag action and admin moderation UI wired to the RPC contract.
+- [ ] Apply migration 014 and verify flag submission, moderation actions, notifications, reputation changes, and audit records in Supabase.
 - [x] Create user management interface for admins
-- [x] Implement system settings configuration
-- [x] Create analytics and reporting dashboard
+- [ ] Implement system settings configuration.
+- [x] Add basic role-specific Statistics pages for agency and admin; full analytics/reporting remain out of scope for that UI.
 
 ### Offline-first Capabilities (Future Enhancement)
 - [x] Implement service worker for asset caching
@@ -238,7 +255,7 @@ This checklist tracks the progress of implementing the RouteGuard Svelte PWA wit
 - [ ] Test routing algorithm with various scenarios
 - [ ] Test notification system (proximity and verification)
 - [ ] Test profile editing and reputation system
-- [ ] Test dark/light theme switching
+- [ ] Test dark/light theme switching at desktop/mobile and verify persisted theme behavior across auth, reports, and staff routes.
 - [ ] Test responsive design on various screen sizes
 - [ ] Test offline capabilities (if implemented)
 - [ ] Verify SEO metadata and social sharing
@@ -274,26 +291,24 @@ This checklist tracks the progress of implementing the RouteGuard Svelte PWA wit
 - User profile and reputation system
 - Basic map view with Leaflet and hazard display
 - Hazard reporting form with photo upload
-- Basic A* routing implementation
+- Basic weighted A* routing implementation (hard closures and current-trip rerouting are not complete)
 - Real-time hazard updates
 - Profile viewing/editing
 - Deployment preparation (Supabase setup, build optimization, monitoring, backup procedures)
 
 ### 🟡 IN PROGRESS / NEEDS VERIFICATION
-- CSS loading verification (checking for 404 errors)
-- Design system variable application verification
-- Real-time notification system implementation
-- Enhanced hazard workflow (verification, expiration, etc.)
-- Complete A* routing with real OSM data
-- Administrative features completion
+- Apply and exercise migrations 013/014; the connected Supabase endpoint has timed out and local Docker/psql are unavailable.
+- Verify admin/user/moderation/audit data reads against deployed RLS and tables.
+- Verify advisory create/edit/draw flows in an authenticated browser and the public map.
+- Implement actual hard road blocking, trip-state rerouting, directed OSM roads, and map base-layer selection per the new plan.
+- Verify responsive/dark-theme/auth and staff navigation in authenticated browser sessions.
 
 ### 🔜 COMING NEXT
-After verifying CSS loads correctly, immediate priorities:
-1. Complete the map page with full Z.AI UI structure
-2. Implement the hazard verification workflow
-3. Finish the notification system (proximity alerts + verification prompts)
-4. Enhance the A* routing with real OSM data loading
-5. Complete administrative dashboard features
+1. Restore Supabase connectivity and apply/verify forward migrations 013 and 014.
+2. Finish authenticated browser verification for staff routes, advisory drawing, and dark mode.
+3. Implement hard hazard/advisory blocks and reliable live rerouting from the user's current location.
+4. Add compliant selectable street, terrain, satellite, and monochrome map layers.
+5. Finish remaining admin user filters/pagination and audit search/export acceptance criteria.
 
 ---
 
@@ -304,7 +319,7 @@ After verifying CSS loads correctly, immediate priorities:
 - Dark theme is implemented via `[data-theme=dark]` selector
 - All colors, borders, radii, shadows, and typography use CSS variables
 - The agency request screen confirms the design system is working correctly
-- The map appears "white" because `--map-land` is `#EDF1F6` (light gray) and the full Z.AI map UI structure isn't implemented yet
+- The app canvas uses a gray-blue light gradient and a separate dark gradient; map base-layer choices remain planned.
 
 ### Technical Implementation Notes:
 - Supabase Auth handles user authentication
@@ -312,14 +327,14 @@ After verifying CSS loads correctly, immediate priorities:
 - PostGIS extension is used for geographic queries and hazard proximity calculations
 - Realtime updates are handled via Supabase Realtime API
 - Photo storage uses Supabase Storage bucket
-- The A* algorithm is currently client-side; consider moving heavy computations to web workers
+- The current A* path is client-side by default and samples hazards per edge; worker performance and blocker snapshot semantics need measurement and verification.
 - Service workers for offline capability can be added later as an enhancement
 
 ### Next Validation Steps:
 When running `npm run dev`, check:
-1. Network tab for CSS/JS loading errors
-2. Console tab for JavaScript errors
-3. Elements tab to verify CSS variable application
-4. Specific components to verify styling consistency
+1. Network tab for CSS/JS loading errors and Supabase reachability
+2. Console tab for JavaScript errors during auth bootstrap and map drawing
+3. Elements tab to verify light/dark canvas and RGIcons styles
+4. Authenticated agency/admin workflows, route rerouting, and map layers against the linked plan
 
 This checklist will be updated as tasks are completed and new requirements emerge.

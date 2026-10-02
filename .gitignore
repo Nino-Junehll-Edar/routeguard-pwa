@@ -42,7 +42,9 @@ dist
 
 research_papers
 
-admin
-agency
-public
+/admin
+/agency
+/public
+/docs
 basicTest.js
+CLAUDE.md

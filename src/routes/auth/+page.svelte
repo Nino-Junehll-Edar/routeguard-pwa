@@ -78,6 +78,12 @@
       else if (p?.role === 'agency_personnel') window.location.assign('/agency');
       else window.location.assign('/map');
       show(p?.full_name ? `Welcome back, ${p.full_name.split(' ')[0]}` : 'Welcome back', 'g');
+    } catch (cause) {
+      console.error('Sign-in failed:', cause);
+      const message = cause instanceof Error ? cause.message : String(cause);
+      error = /failed to fetch|network|timed out|timeout/i.test(message)
+        ? 'Unable to reach the sign-in service. Check your connection and try again.'
+        : friendly(message);
     } finally {
       loading = false;
     }
@@ -191,7 +197,7 @@
 <style>
   /* Import CSS variables from the design overhaul */
   :root{
-    --bg:#F7F8FA;--surface:#FFFFFF;--raised:#FFFFFF;--border:#DDE3EA;--ink:#12161A;--ink2:#4A545E;
+    --bg:#E7EDF4;--surface:#FFFFFF;--raised:#FFFFFF;--border:#DDE3EA;--ink:#12161A;--ink2:#4A545E;
     --primary:#1B5CA8;--primary-ink:#0F3460;--primary-surface:#E7F0FA;--danger:#C4271E;--danger-sf:#FBE9E7;
     --warning:#B45309;--warning-sf:#FCF0DD;--caution:#F0A400;--neutral:#64748B;--neutral-sf:#EEF1F5;
     --success:#2E8555;--success-sf:#E4F3EB;--advisory:#6D28D9;--advisory-sf:#F1EAFB;--route:#1D66C9;--gold:#B7791F;
@@ -208,7 +214,7 @@
   }
 
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:var(--f);background:var(--bg);color:var(--ink);font-size:14.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  body{font-family:var(--f);background:var(--app-background,linear-gradient(145deg,#E7EDF4 0%,#DCE8F5 52%,#D3E1F1 100%));color:var(--ink);font-size:14.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
   button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
   input,select,textarea{font:inherit;color:var(--ink)}
   a{color:var(--primary);font-weight:700;text-decoration:none}
@@ -224,6 +230,7 @@
   .view{display:none}.view.on{display:block}
   /* ============ AUTH (slider card) ============ */
   #view-auth.on{display:flex;min-height:calc(100vh - 52px);align-items:center;justify-content:center;padding:24px 16px;background:linear-gradient(160deg,var(--primary-surface),var(--bg) 55%,var(--advisory-sf))}
+  #view-auth.on>div{width:min(560px,100%);margin-inline:auto}
   .brand{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:20px;text-align:center}
   .mark{width:64px;height:64px;border-radius:18px;background:var(--primary);color:#fff;display:grid;place-items:center;box-shadow:var(--e2)}
   .mark svg{width:34px;height:34px}
@@ -261,9 +268,6 @@
   .alt{display:flex;gap:8px;align-items:center;margin-top:14px;font-size:13px;color:var(--ink2)}
   .alt b{color:var(--acc);cursor:pointer}
   .ahint{font-size:12px;color:var(--ink2);background:var(--neutral-sf);border-radius:var(--r-s);padding:9px 11px;margin:10px 0}
-  .drow{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)}
-  .drow .db{flex:1;min-width:150px;background:var(--neutral-sf);color:var(--ink);border:1.5px solid var(--border)}
-  .drow .db small{display:block;font-weight:600;font-size:10.5px;color:var(--ink2)}
   .okbox{display:none;text-align:center;padding:18px 6px}
   .okbox.on{display:block}
   .okc{width:74px;height:74px;border-radius:50%;background:var(--success-sf);color:var(--success);display:grid;place-items:center;margin:0 auto 12px;animation:pop .5s var(--ease)}
@@ -300,7 +304,7 @@
               {#if loading}
                 Signing in...
               {:else}
-                Sign in — instant access
+                Sign in
               {/if}
             </button>
             <div class="alt">New here? <button on:click={() => { activeTab = 'signup'; }} class="link-button">Create a community account</button></div>
@@ -339,7 +343,6 @@
               <span class="okc blue"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg></span><b>Check your email</b><p class="sub" style="margin:4px 0 12px">We sent a verification link to your inbox.</p><button class="btn blk" id="btnVerified">I've verified — enter RouteGuard</button>
             </div>
           </div>
-          <div class="drow"><button class="btn b2 db" id="demoCom">⚡ Try demo account<small>Maria Santos · Community</small></button></div>
           <div class="guestlnk"><b>Continue as guest</b> — browse the map, no account needed</div>
         </div>
                 <div class="apane">
@@ -379,10 +382,6 @@
                 Submit request for review
               {/if}
             </button>
-          </div>
-          <div class="drow">
-            <button class="btn b2 db" id="demoAg">⚡ Try demo<small>Kevin Bautista · LGU Agency</small></button>
-            <button class="btn b2 db" id="demoAdm">⚡ Try demo<small>R. Villanueva · Admin</small></button>
           </div>
         </div>
       </div></div>

@@ -7,11 +7,15 @@ import type { AgencyAdvisory } from '$lib/types/hazard';
 import type { RouteResult } from '$lib/types/routing';
 import { normalizeHazardLocation } from './geoUtils';
 import { supabase } from './supabaseClient';
+import './routeguard-icons.js';
 
 let leaflet: typeof import('leaflet') | null = null;
 let map: Leaflet.Map | null = null;
 let hazardLayer: Leaflet.LayerGroup | null = null;
 let advisoryLayer: Leaflet.LayerGroup | null = null;
+let realtimeSubscriptionId = 0;
+let hazardRealtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+let advisoryRealtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 let userMarker: Leaflet.Marker | null = null;
 let accuracyCircle: Leaflet.Circle | null = null;
 let routeLayer: Leaflet.LayerGroup | null = null;
@@ -118,44 +122,20 @@ export function addHazardMarker(
   if (!coordinates) return null;
   const [lng, lat] = coordinates;
   const marker = L.marker([lat, lng], {
-    title: `${hazard.hazard_type} - ${hazard.status}`
+    title: `${hazard.hazard_type} - ${hazard.status}`,
+    icon: RGIcons.pinIcon({
+      tag: hazard.hazard_type,
+      severity: hazard.severity,
+      verified: hazard.status === 'hazard_active',
+      cleared: hazard.status === 'hazard_cleared',
+      expired: hazard.status === 'expired',
+      selected: selectedHazardId === hazard.id
+    }, L)
   });
 
-  // Determine pin style based on hazard status
-  const { pinColor, badgeColor, badgeText, pulseColor } = getHazardPinStyles(
-    hazard.status,
-    hazard.hazard_type,
-    hazard.lifetime_minutes
-  );
-
-  // Create the full Z.AI style hazard pin
-  const icon = L.divIcon({
-    className: 'hazard-pin-wrapper',
-    html: `
-      <div class="hazard-pin" style="background-color: ${pinColor}; border-color: ${pinColor};">
-        ${hazard.lifetime_minutes > 0 && hazard.lifetime_minutes < 60 ?
-          `<div class="hazard-pin-badge" style="background-color: ${badgeColor};">${badgeText}</div>` : ''}
-        <div class="hazard-pin-inner" style="border-color: ${pinColor};">
-          <div class="hazard-pin-dot"></div>
-        </div>
-        ${hazard.lifetime_minutes > 0 ?
-          `<div class="hazard-pin-query-bubble">${escapeHtml(hazard.hazard_type)}</div>` : ''}
-      </div>
-      ${selectedHazardId === hazard.id ?
-        `<div class="selection-pulse" style="background-color: ${pulseColor || pinColor};"></div>` : ''}
-    `,
-    iconSize: [30, 40],
-    iconAnchor: [15, 40],
-    popupAnchor: [0, -40]
-  });
-
-  marker.setIcon(icon);
-
-  // Add popup with hazard info - escaped to prevent XSS
   const escapedHazardType = escapeHtml(hazard.hazard_type);
   const escapedStatus = escapeHtml(hazard.status.replace('_', ' '));
   const safePhotoUrl = hazard.photo_url ? sanitizeUrl(hazard.photo_url) : '';
-  // Escape the URL for use in HTML attribute
   const escapedPhotoUrl = safePhotoUrl
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
@@ -186,89 +166,6 @@ export function addHazardMarker(
 }
 
 /**
- * Get hazard pin styles based on status and type
- */
-function getHazardPinStyles(status: string, hazardType: string, lifetimeMinutes: number = 0): {
-  pinColor: string;
-  badgeColor: string;
-  badgeText: string;
-  pulseColor: string
-} {
-  // Base colors from design system
-  const colors: Record<string, string> = {
-    '--danger': 'var(--danger)',
-    '--warning': 'var(--warning)',
-    '--success': 'var(--success)',
-    '--info': 'var(--info)',
-    '--neutral': 'var(--neutral)',
-    '--caution': 'var(--caution)'
-  };
-
-  let pinColor = colors['--neutral'];
-  let badgeColor = colors['--primary'];
-  let badgeText = '!?';
-  let pulseColor = colors['--primary'];
-
-  switch (status) {
-    case 'impassable':
-      pinColor = colors['--danger'];
-      badgeColor = colors['--danger'];
-      badgeText = '!';
-      pulseColor = colors['--danger'];
-      break;
-    case 'one_lane':
-      pinColor = colors['--warning'];
-      badgeColor = colors['--warning'];
-      badgeText = '1';
-      pulseColor = colors['--warning'];
-      break;
-    case 'passable':
-    case 'hazard_cleared':
-      pinColor = colors['--success'];
-      badgeColor = colors['--success'];
-      badgeText = '✓';
-      pulseColor = colors['--success'];
-      break;
-    case 'hazard_active':
-      pinColor = colors['--danger'];
-      badgeColor = colors['--danger'];
-      badgeText = '!';
-      pulseColor = colors['--danger'];
-      break;
-    case 'needs_verification':
-      pinColor = colors['--warning'];
-      badgeColor = colors['--warning'];
-      badgeText = '!?';
-      pulseColor = colors['--warning'];
-      break;
-    case 'unconfirmed':
-    case 'expired':
-    default:
-      pinColor = colors['--info'];
-      badgeColor = colors['--info'];
-      badgeText = '?';
-      pulseColor = colors['--info'];
-  }
-
-  // Adjust badge text based on hazard type for query bubble
-  const typeMap: Record<string, string> = {
-    'flood': '💧',
-    'landslide': '⚠️',
-    'road-damage': '🚧',
-    'fallen-tree': '🌳',
-    'accident': '💥',
-    'construction': '🚧'
-  };
-
-  // For query bubble, use hazard type emoji or abbreviation
-  if (lifetimeMinutes > 0) {
-    badgeText = typeMap[hazardType] || (hazardType ? hazardType.substring(0, 1).toUpperCase() : '?');
-  }
-
-  return { pinColor, badgeColor, badgeText, pulseColor };
-}
-
-/**
  * Update user location on map
  */
 export function updateUserPosition(latitude: number, longitude: number, accuracy: number = 0): void {
@@ -280,7 +177,8 @@ export function updateUserPosition(latitude: number, longitude: number, accuracy
     userMarker.setLatLng([latitude, longitude]);
   } else {
     userMarker = L.marker([latitude, longitude], {
-      title: 'Your Location'
+      title: 'Your Location',
+      icon: RGIcons.userDotIcon(L)
     }).addTo(map);
 
     // Add accuracy circle
@@ -380,50 +278,47 @@ export function clearAdvisoryMarkers(): void {
 /**
  * Add an advisory marker to the map
  */
-export function addAdvisoryMarker(advisory: AgencyAdvisory): Leaflet.Marker | null {
+export function addAdvisoryMarker(advisory: AgencyAdvisory): Leaflet.Layer | null {
   const L = leaflet;
   if (!L || !map || !advisoryLayer) return null;
 
-  // Handle different geometry types
-  let latLngs: Array<[number, number]> = [];
-
-  if (advisory.geometry) {
-    // For now, we'll handle Point geometries
-    // In a full implementation, you'd handle LineString, Polygon, etc.
-        const geom = advisory.geometry;
-    if (geom && geom.type === 'Point' && Array.isArray(geom.coordinates) && geom.coordinates.length >= 2) {
-      const [lng, lat] = geom.coordinates as [number, number];
-      latLngs = [[lat, lng]];
-    }
-    // Could add support for LineString, Polygon here
+  if (advisory.geometry && typeof advisory.geometry === 'object' && 'type' in advisory.geometry && advisory.geometry.type !== 'Point') {
+    const style = advisory.geometry.type === 'Polygon'
+      ? RGIcons.advisory.area()
+      : RGIcons.advisory.line(advisory.advisory_type);
+    const geometryLayer = L.geoJSON(advisory.geometry as GeoJSON.Geometry, {
+      style,
+      onEachFeature: (_feature, featureLayer) => {
+        featureLayer.bindTooltip(escapeHtml(advisory.title), RGIcons.advisory.tooltip(advisory.title));
+        featureLayer.bindPopup(`<strong>${escapeHtml(advisory.title)}</strong><br>${escapeHtml(advisory.advisory_type)}`);
+      }
+    });
+    geometryLayer.addTo(advisoryLayer);
+    return geometryLayer.getLayers()[0] ?? null;
   }
 
-  if (latLngs.length === 0) return null;
+  // Handle point geometry
+  let latLng: [number, number] | null = null;
 
-  // For simplicity, we'll just use the first point for Point geometries
-  // For lines/polygons, we'd use polyline/polygon
-  const [lat, lng] = latLngs[0];
-  const marker = L.marker([lat, lng], {
-    title: `${advisory.title} - ${advisory.advisory_type}`
+  if (advisory.geometry) {
+    const geom = advisory.geometry;
+    if (geom && geom.type === 'Point' && Array.isArray(geom.coordinates) && geom.coordinates.length >= 2) {
+      const [lng, lat] = geom.coordinates as [number, number];
+      latLng = [lat, lng];
+    }
+  }
+
+  if (!latLng) return null;
+
+  const marker = L.marker(latLng, {
+    title: `${advisory.title} - ${advisory.advisory_type}`,
+    icon: L.divIcon({
+      className: '',
+      html: `<span class="rg-advisory-point">${RGIcons.glyph('flag', { size: 15 })}</span>`,
+      iconSize: [30, 30],
+      iconAnchor: [15, 15]
+    })
   });
-
-  // Create advisory icon
-  const icon = L.divIcon({
-    className: 'advisory-pin-wrapper',
-    html: `
-      <div class="advisory-pin" style="background-color: var(--info); border-color: var(--info);">
-        <div class="advisory-pin-inner" style="border-color: var(--info);">
-          <div class="advisory-pin-dot"></div>
-        </div>
-        <div class="advisory-pin-query-bubble">${escapeHtml(advisory.advisory_type)}</div>
-      </div>
-    `,
-    iconSize: [30, 40],
-    iconAnchor: [15, 40],
-    popupAnchor: [0, -40]
-  });
-
-  marker.setIcon(icon);
 
   // Add popup with advisory info
   const escapedTitle = escapeHtml(advisory.title);
@@ -455,8 +350,9 @@ export function subscribeToHazardChanges(
   onVerificationNeeded?: (hazard: any) => void,
   onHazardSelected?: (hazard: Hazard) => void
 ): void {
-  supabase
-    .channel('hazards-changes')
+  if (hazardRealtimeChannel) void supabase.removeChannel(hazardRealtimeChannel);
+  hazardRealtimeChannel = supabase
+    .channel(`map-utils-hazards-${++realtimeSubscriptionId}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'hazards' },
@@ -479,8 +375,9 @@ export function subscribeToHazardChanges(
  * Subscribe to real-time advisory updates
  */
 export function subscribeToAdvisoryChanges(onAdvisoriesUpdated?: () => void): void {
-  supabase
-    .channel('advisory-changes')
+  if (advisoryRealtimeChannel) void supabase.removeChannel(advisoryRealtimeChannel);
+  advisoryRealtimeChannel = supabase
+    .channel(`map-utils-advisories-${++realtimeSubscriptionId}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'agency_advisories' },
@@ -508,31 +405,12 @@ export function displayRoute(route: RouteResult): void {
   const latLngs: Array<[number, number]> = route.points.map((point) => [point.lat, point.lng]);
 
   // Create polyline with hazard-aware coloring
-  L.polyline(latLngs, {
-    color: getRouteColor(route.hazardScore),
-    weight: 6,
-    opacity: 0.8,
-    smoothFactor: 1
-  }).addTo(routeLayer);
+  L.polyline(latLngs, RGIcons.route.casing()).addTo(routeLayer);
+  L.polyline(latLngs, { ...RGIcons.route.line(), color: getRouteColor(route.hazardScore) }).addTo(routeLayer);
 
   // Add start and end markers
-  L.marker([route.points[0].lat, route.points[0].lng], {
-    title: 'Start',
-    icon: L.divIcon({
-      className: 'start-marker',
-      html: '<div style="background-color: var(--success); width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--surface);"></div>',
-      iconSize: [16, 16]
-    })
-  }).addTo(routeLayer);
-
-  L.marker([route.points[route.points.length - 1].lat, route.points[route.points.length - 1].lng], {
-    title: 'End',
-    icon: L.divIcon({
-      className: 'end-marker',
-      html: '<div style="background-color: var(--danger); width: 16px; height: 16px; border-radius: 2px solid var(--surface);"></div>',
-      iconSize: [16, 16]
-    })
-  }).addTo(routeLayer);
+  L.circleMarker(latLngs[0], { radius: 7, color: '#fff', weight: 2, fillColor: 'var(--success)', fillOpacity: 1 }).addTo(routeLayer);
+  L.circleMarker(latLngs[latLngs.length - 1], { radius: 7, color: '#fff', weight: 2, fillColor: 'var(--danger)', fillOpacity: 1 }).addTo(routeLayer);
 
   // Fit map to show the entire route
   const bounds = L.latLngBounds(latLngs);

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { supabase } from '$lib/supabaseClient';
   import { user } from '$lib/authStore';
   import { profile } from '$lib/stores/profile';
@@ -55,6 +55,8 @@
   const advisoriesList = writable<Advisory[]>([]);
   const loading = writable<boolean>(true);
   const error = writable<string | null>(null);
+  let hazardsRealtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+  let advisoriesRealtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 
   // Check authorization
   async function checkAuthorization() {
@@ -69,8 +71,8 @@
 
     // Wait for profile to load if not already loaded
     if (!profileData) {
-      // Profile will be loaded via authStore listener, we'll check again in a moment
-      // For now, we'll assume not authorized until profile loads
+      error.set('Unable to verify your staff account. Please sign in again.');
+      goto('/auth');
       return false;
     }
 
@@ -241,7 +243,7 @@
   // Initialize real-time subscriptions
   function setupRealtime() {
     // Hazards changes
-    supabase.channel('hazards-changes')
+    hazardsRealtimeChannel = supabase.channel('agency-overview-hazards')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'hazards' },
@@ -253,7 +255,7 @@
       .subscribe();
 
     // Agency advisories changes
-    supabase.channel('advisories-changes')
+    advisoriesRealtimeChannel = supabase.channel('agency-overview-advisories')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'agency_advisories' },
@@ -268,13 +270,21 @@
   // Page load
   onMount(async () => {
     const authorized = await checkAuthorization();
-    if (!authorized) return;
+    if (!authorized) {
+      loading.set(false);
+      return;
+    }
 
     await loadStats();
     await loadLatestHazards();
     await loadAdvisories();
     setupRealtime();
     loading.set(false);
+  });
+
+  onDestroy(() => {
+    if (hazardsRealtimeChannel) void supabase.removeChannel(hazardsRealtimeChannel);
+    if (advisoriesRealtimeChannel) void supabase.removeChannel(advisoriesRealtimeChannel);
   });
 </script>
 
@@ -355,10 +365,10 @@
               </li>
             {/each}
           </ul>
-          <div class="footer-link">
-            <a href="/agency#hazard-review" data-sveltekit-reload>Open review queue →</a>
-          </div>
         {/if}
+        <div class="footer-link">
+          <a href="/agency/hazards">Open review queue →</a>
+        </div>
       </div>
 
       <div class="advisories-list" id="advisories">
@@ -396,10 +406,10 @@
               </li>
             {/each}
           </ul>
-          <div class="footer-link">
-            <a href="/agency#advisories" data-sveltekit-reload>Manage advisories →</a>
-          </div>
         {/if}
+        <div class="footer-link">
+          <a href="/agency/advisories">Manage advisories →</a>
+        </div>
       </div>
     </section>
   </div>

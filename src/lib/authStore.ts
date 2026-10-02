@@ -14,7 +14,24 @@ export const authError = writable<string | null>(null)
 export const profileLoading = writable<boolean>(false)
 export const profileError = writable<string | null>(null)
 
-  let authListener: { data: { subscription: { unsubscribe: () => void } } } | null = null
+const AUTH_BOOTSTRAP_TIMEOUT_MS = 12_000
+let authListener: { data: { subscription: { unsubscribe: () => void } } } | null = null
+
+function withTimeout<T>(operation: Promise<T>, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(message)), AUTH_BOOTSTRAP_TIMEOUT_MS)
+    operation.then(
+      value => {
+        clearTimeout(timeout)
+        resolve(value)
+      },
+      error => {
+        clearTimeout(timeout)
+        reject(error)
+      }
+    )
+  })
+}
 
 /** Initialize authentication with proper state management */
 export async function initAuth() {
@@ -28,12 +45,19 @@ export async function initAuth() {
     authLoading.set(true)
     authError.set(null)
 
-    const { data: { session } } = await supabase.auth.getSession()
+    const { data: { session }, error: sessionError } = await withTimeout(
+      supabase.auth.getSession(),
+      'Timed out connecting to Supabase. Check your connection, then retry.'
+    )
+    if (sessionError) throw sessionError
     user.set(session?.user ?? null)
 
     if (session?.user) {
       profileLoading.set(true)
-      await loadProfile()
+      await withTimeout(
+        loadProfile(),
+        'Timed out loading your account profile. Check your connection, then retry.'
+      )
       profileLoading.set(false)
     } else {
       profile.set(null)
@@ -79,7 +103,8 @@ export async function initAuth() {
 /** Sign out the current user */
 export async function signOut() {
   try {
-    await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut({ scope: 'local' })
+    if (error) throw error
     // The onAuthStateChange listener will handle clearing state and redirect
   } catch (error) {
     console.error('Sign out error:', error)

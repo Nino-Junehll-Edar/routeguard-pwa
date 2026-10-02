@@ -2,7 +2,8 @@
 
 :root {
   color-scheme: light;
-  --bg: #f7f8fa;
+  --bg: #E7EDF4;
+  --app-background: linear-gradient(145deg, #E7EDF4 0%, #DCE8F5 52%, #D3E1F1 100%);
   --surface: #fff;
   --raised: #fff;
   --border: #dde3ea;
@@ -47,6 +48,7 @@
 [data-theme='dark'] {
   color-scheme: dark;
   --bg: #0e1116;
+  --app-background: linear-gradient(145deg, #0e1116 0%, #121a25 55%, #162131 100%);
   --surface: #161b22;
   --raised: #1c2430;
   --border: #2a3340;
@@ -92,7 +94,7 @@ body {
 
 body {
   overflow: hidden;
-  background: var(--bg);
+  background: var(--app-background);
   color: var(--ink);
   font: 14px/1.5 var(--font);
   -webkit-font-smoothing: antialiased;
@@ -135,7 +137,7 @@ svg.ic {
   width: 100%;
   height: 100dvh;
   overflow: hidden;
-  background: var(--bg);
+  background: var(--app-background);
   color: var(--ink);
 }
 
@@ -184,6 +186,64 @@ svg.ic {
 }
 
 .app-sidebar.open { transform: translateX(0); visibility: visible; }
+
+.staff-shell {
+  display: block;
+}
+
+.staff-shell .app-content {
+  height: 100dvh;
+  margin-left: 248px;
+  transition: margin-left .2s ease;
+}
+
+.staff-shell.sidebar-collapsed .app-content {
+  margin-left: 72px;
+}
+
+.app-sidebar.staff-sidebar {
+  width: 248px;
+  padding: max(68px, calc(env(safe-area-inset-top) + 56px)) 12px max(18px, env(safe-area-inset-bottom));
+  box-shadow: none;
+  transform: none;
+  visibility: visible;
+  transition: width .2s ease;
+}
+
+.sidebar-collapse-toggle {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  right: 12px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--r-s);
+  background: var(--raised);
+  color: var(--ink2);
+}
+
+.sidebar-collapse-toggle:hover { color: var(--primary); }
+.sidebar-collapse-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.staff-sidebar .drawer-brand { padding-right: 8px; }
+.staff-sidebar .drawer-nav a { display: flex; align-items: center; gap: 12px; }
+.nav-abbreviation { display: none; }
+
+.app-sidebar.staff-sidebar.collapsed {
+  width: 72px;
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.staff-sidebar.collapsed .sidebar-collapse-toggle { right: 17px; }
+.staff-sidebar.collapsed .drawer-brand { justify-content: center; padding-right: 0; padding-left: 0; }
+.staff-sidebar.collapsed .drawer-brand span,
+.staff-sidebar.collapsed .nav-label,
+.staff-sidebar.collapsed .drawer-email { display: none; }
+.staff-sidebar.collapsed .drawer-nav a { justify-content: center; padding-right: 0; padding-left: 0; }
+.staff-sidebar.collapsed .nav-abbreviation { display: inline; min-width: 28px; text-align: center; }
+.staff-sidebar.collapsed .drawer-signout { padding: 4px 2px; font-size: 11px; line-height: 1.15; white-space: normal; }
 
 .drawer-brand {
   display: flex;

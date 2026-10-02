@@ -3,6 +3,7 @@
   import { user } from '$lib/authStore';
   import { addHazardComment, getHazardComments, type Comment } from '$lib/commentUtils';
   import { getHazardVoteSummary, voteOnHazard } from '$lib/voteUtils';
+  import { supabase } from '$lib/supabaseClient';
   import { normalizeHazardLocation } from '$lib/geoUtils';
   import type { Hazard } from '$lib/types/hazard';
 
@@ -20,6 +21,7 @@
   let commentSubmitting = false;
   let votes = { upvotes: 0, downvotes: 0, userVote: null as 'upvote' | 'downvote' | null };
   let voting = false;
+  let flagSubmitting = false;
   let statusMessage = '';
   $: coordinates = normalizeHazardLocation(hazard?.location);
 
@@ -73,6 +75,33 @@
     await voteOnHazard(hazard.id, voteType);
     votes = await getHazardVoteSummary(hazard.id);
     voting = false;
+  }
+
+  async function flagHazard() {
+    if (!hazard || flagSubmitting) return;
+    if (!$user) return requireSignIn();
+
+    const reason = window.prompt('Why should moderators review this report?');
+    if (reason === null) return;
+    if (!reason.trim()) {
+      statusMessage = 'Enter a reason to flag this report.';
+      return;
+    }
+
+    flagSubmitting = true;
+    try {
+      const { error } = await supabase.rpc('flag_hazard', {
+        p_hazard_id: hazard.id,
+        p_reason: reason.trim()
+      });
+      if (error) throw error;
+      statusMessage = 'Report sent to moderators for review.';
+    } catch (cause) {
+      console.error('Error flagging hazard:', cause);
+      statusMessage = cause instanceof Error ? cause.message : 'Could not flag this report.';
+    } finally {
+      flagSubmitting = false;
+    }
   }
 
   function hazardTypeLabel(type: string): string {
@@ -193,6 +222,11 @@
             <button class="secondary-action" type="button" onclick={() => dispatch('confirm', { hazardId: hazard.id, verificationType: 'hazard_cleared' })}>Cleared</button>
           </div>
         {/if}
+        {#if $user && hazard.reporter_id !== $user.id}
+          <button class="flag-action" type="button" disabled={flagSubmitting} onclick={flagHazard}>
+            {flagSubmitting ? 'Sending…' : 'Flag for review'}
+          </button>
+        {/if}
       </footer>
     </section>
   </div>
@@ -248,6 +282,8 @@
   .action-pair { display: flex; gap: 8px; }
   .primary-action, .secondary-action { display: inline-flex; min-height: 44px; flex: 1; align-items: center; justify-content: center; border: 1px solid var(--primary); border-radius: var(--r-s); background: var(--primary); color: #fff; font-size: 13px; font-weight: 700; text-decoration: none; }
   .secondary-action { border-color: var(--border); background: var(--surface); color: var(--ink2); }
+  .flag-action { min-height: 40px; width: 100%; margin-top: 8px; border: 1px solid var(--border); border-radius: var(--r-s); background: var(--surface); color: var(--ink2); font-size: 12px; font-weight: 700; }
+  .flag-action:disabled { opacity: .6; cursor: wait; }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   @keyframes sheet-in { from { transform: translateY(24px); opacity: .7; } to { transform: translateY(0); opacity: 1; } }
   @media (min-width: 761px) { .hazard-sheet { margin-bottom: 16px; border-radius: var(--r-l); } }

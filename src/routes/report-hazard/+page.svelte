@@ -383,7 +383,7 @@
 <style>
   /* Import CSS variables from the design overhaul */
   :root{
-    --bg:#F7F8FA;--surface:#FFFFFF;--raised:#FFFFFF;--border:#DDE3EA;--ink:#12161A;--ink2:#4A545E;
+    --bg:#E7EDF4;--surface:#FFFFFF;--raised:#FFFFFF;--border:#DDE3EA;--ink:#12161A;--ink2:#4A545E;
     --primary:#1B5CA8;--primary-ink:#0F3460;--primary-surface:#E7F0FA;--danger:#C4271E;--danger-sf:#FBE9E7;
     --warning:#B45309;--warning-sf:#FCF0DD;--caution:#F0A400;--neutral:#64748B;--neutral-sf:#EEF1F5;
     --success:#2E8555;--success-sf:#E4F3EB;--advisory:#6D28D9;--advisory-sf:#F1EAFB;--route:#1D66C9;--gold:#B7791F;
@@ -400,7 +400,7 @@
   }
 
   *{margin:0;padding:0;box-sizing:border-box}
-  body{font-family:var(--f);background:var(--bg);color:var(--ink);font-size:14.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  body{font-family:var(--f);background:var(--app-background,linear-gradient(145deg,#E7EDF4 0%,#DCE8F5 52%,#D3E1F1 100%));color:var(--ink);font-size:14.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
 
   .report-container {
     max-width: 600px;

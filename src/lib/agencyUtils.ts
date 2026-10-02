@@ -25,6 +25,19 @@ export interface AgencyRequest {
   updated_at: string;
 }
 
+export type StaffHazardStatus = 'hazard_active' | 'hazard_cleared';
+
+export interface AgencyAdvisoryInput {
+  id?: string;
+  title: string;
+  advisoryType: string;
+  description: string | null;
+  geometry: { type: 'Point' | 'LineString' | 'Polygon'; coordinates: unknown };
+  startTime: string | null;
+  endTime: string | null;
+  isActive: boolean;
+}
+
 /**
  * Submit an agency request
  */
@@ -110,6 +123,59 @@ export async function rejectAgencyRequest(requestId: string, reason?: string): P
       return { success: false, error: error.message };
     }
 
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+export async function reviewAgencyHazard(
+  hazardId: string,
+  status: StaffHazardStatus
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.rpc('agency_review_hazard', {
+      p_hazard_id: hazardId,
+      p_status: status
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+export async function saveAgencyAdvisory(
+  advisory: AgencyAdvisoryInput
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  try {
+    const { data, error } = await supabase.rpc('agency_save_advisory', {
+      p_id: advisory.id ?? null,
+      p_title: advisory.title,
+      p_advisory_type: advisory.advisoryType,
+      p_description: advisory.description,
+      p_geometry: advisory.geometry,
+      p_start_time: advisory.startTime,
+      p_end_time: advisory.endTime,
+      p_is_active: advisory.isActive
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true, id: data as string };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+export async function setAgencyAdvisoryActive(
+  advisoryId: string,
+  isActive: boolean
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.rpc('admin_set_advisory_active', {
+      p_advisory_id: advisoryId,
+      p_is_active: isActive
+    });
+    if (error) return { success: false, error: error.message };
     return { success: true };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
